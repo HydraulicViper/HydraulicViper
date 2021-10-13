@@ -1,0 +1,268 @@
+---
+title: "Using machin learning algorithm to by pass GRANAR & MECHA"
+author: "Adrien Heymans"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+setwd(dir = "~/Thesis/2020-10 HydraulicViper/")
+source("~/Thesis/2020-10 HydraulicViper/Anat_proc/io_anaproc.R")
+params <- read_param_xml("~/Thesis/2020-10 HydraulicViper/GRANAR/www/Zea_mays_CT.xml")
+```
+
+```{r}
+
+vals <- list(list(var="radius",dist="unif",params=list(min=0.1,max=1.5)),
+             list(var="var_stele",dist="unif",params=list(min=-0.3,max=0.4)),
+             list(var="var_xylem",dist="unif",params=list(min=-0.3,max=0.3)),
+             list(var="aerenchyma",dist="unif",params=list(min=0,max=0.5)),
+             list(var="kw",dist="unif",params=list(min=0.1*2.4E-4,max=10*2.4E-4)),
+             list(var="kAQP",dist="unif",params=list(min=0.1*4.3E-4,max=10*4.3E-4)),
+             list(var="kpl",dist="unif",params=list(min=0.01*5.3E-12,max=100*5.3E-12)),
+             list(var="thickness",dist="unif",params=list(min=0.8,max=2)))
+
+Sobol_inf <- Rootdata(n = 2^10, vals)
+Sampl <- Rootdetails(Sobol_inf)
+
+#write.csv(Sampl, "~/Thesis/2020-10 HydraulicViper/Sobol_inputGM.csv")
+
+do_GranarMECHA(Sampl, params)
+```
+
+```{r}
+detach("package:sensitivity", unload=TRUE)
+Out <- batch_Gmeta(path = "~/Thesis/2020-10 HydraulicViper/MECHA/cellsetdata/wide/")
+vals <- list(list(var="radius",dist="unif",params=list(min=0.1,max=1.5)),
+             list(var="var_stele",dist="unif",params=list(min=-0.3,max=0.4)),
+             list(var="var_xylem",dist="unif",params=list(min=-0.3,max=0.3)),
+             list(var="aerenchyma",dist="unif",params=list(min=0,max=0.5)),
+             list(var="kw",dist="unif",params=list(min=0.1*2.4E-4,max=10*2.4E-4)),
+             list(var="km",dist="unif",params=list(min=0.1*3E-5,max=10*3E-5)),
+             list(var="kAQP",dist="unif",params=list(min=0.1*4.3E-4,max=10*4.3E-4)),
+             list(var="kpl",dist="unif",params=list(min=0.01*5.3E-12,max=100*5.3E-12)),
+             list(var="thickness",dist="unif",params=list(min=0.8,max=2)))
+
+design <- makeMCSample(2000,vals)
+Outi <- revdet(Out, Sobol_inf, design)
+
+K <- get_GMecha(design, first = 1)
+data_GM1 <- left_join(K, Outi, by = "sampl_id")
+
+Out <- batch_Gmeta(path = "~/Thesis/2020-10 HydraulicViper/MECHA/cellsetdata/plus/")
+Sobol <- Sobol_inf[[1]]
+Outi <- revdet(Out, Sobol_inf, Sobol$X)
+
+K <- get_GMecha(design = Sobol$X, first = 2)
+data_GM2 <- left_join(K, Outi, by = "sampl_id")
+
+data_GM = rbind(data_GM1, data_GM2)
+
+data_GM%>%
+  ggplot()+
+  geom_density(aes(kr_2, fill = round(var_stele/5)*5, group = round(var_stele/5)*5), alpha = 0.3)+
+  scale_x_continuous(trans = "log2")
+data_GM%>%
+  ggplot()+
+  geom_density(aes(kr_2, fill = round(kpl*1E11/5)*5, group = round(kpl*1E11/5)*5), alpha = 0.4)+
+    scale_x_continuous(trans = "log10")+
+  viridis::scale_fill_viridis()
+data_GM%>%
+  ggplot()+
+  geom_density(aes(kr_1, fill = round(kpl*1E11/5)*5, group = round(kpl*1E11/5)*5), alpha = 0.4)+
+  scale_x_continuous(trans = "log10")+
+  viridis::scale_fill_viridis()
+
+
+data_GM%>%
+  ggplot()+
+  geom_point(aes(log(kw*kAQP*kpl*thickness), radius, colour = log2(kr_1)), alpha = 0.8, size = 3)+
+  viridis::scale_colour_viridis()+theme_dark()
+
+
+# write.csv(data_GM, "~/Thesis/2020-10 HydraulicViper/data_GM0821.csv")
+```
+
+```{r}
+# Example 
+
+
+Flux1 <- ApoSymp("~/Thesis/2020-10 HydraulicViper/MECHA/Projects/GRANAR/out_plus/Macro_prop_1,0_15.txt")
+Flux2 <- ApoSymp("~/Thesis/2020-10 HydraulicViper/MECHA/Projects/GRANAR/out_plus/Macro_prop_2,1_15.txt")
+Flux3 <- ApoSymp("~/Thesis/2020-10 HydraulicViper/MECHA/Projects/GRANAR/out_plus/Macro_prop_4,2_15.txt")
+plot_water_flux(Flux1, apobar = 1)
+plot_water_flux(Flux2, apobar = 2)
+plot_water_flux(Flux3, apobar = 3)
+
+```
+
+```{r}
+data_GM <- read.csv("~/Thesis/2020-10 HydraulicViper/data_GM0821.csv")
+
+Accuracy <- train_model(data_GM, n_rep = 10)
+```
+
+```{r}
+
+Accuracy %>%
+  #filter(model_type == "rf")%>%
+  ggplot(aes(kr, nrrmse, colour = model_type))+
+  geom_boxplot()+
+  geom_point()
+
+Accuracy %>%
+  #filter(model_type == "rf")%>%
+  ggplot(aes(kr, rsquare, colour = model_type))+
+  geom_boxplot()+
+  geom_point()
+
+Accuracy%>%
+  dplyr::group_by(kr, model_type)%>%
+  dplyr::summarise(n = n(),
+            err = mean(nrrmse),
+            rs = mean(rsquare),
+            minerr = min(nrrmse),
+            max_rs = max(rsquare),
+            p = mean(t_pval))
+
+# write.csv(Accuracy, "~/Thesis/2020-10 HydraulicViper/Anat_proc/accuracyIA.csv")
+```
+
+```{r}
+load("~/Thesis/2020-10 HydraulicViper/Anat_proc/svm_model_kr1.RData")
+model_kr1svm <- fit.svm
+load("~/Thesis/2020-10 HydraulicViper/Anat_proc/rf_model_kr1.RData")
+model_kr1rf <- fit.rf
+load("~/Thesis/2020-10 HydraulicViper/Anat_proc/svm_model_kr2.RData")
+model_kr2svm <- fit.svm
+load("~/Thesis/2020-10 HydraulicViper/Anat_proc/rf_model_kr2.RData")
+model_kr2rf <- fit.rf
+load("~/Thesis/2020-10 HydraulicViper/Anat_proc/svm_model_kr3.RData")
+model_kr3svm <- fit.svm
+load("~/Thesis/2020-10 HydraulicViper/Anat_proc/rf_model_kr3.RData")
+model_kr3rf <- fit.rf
+
+
+predictions1 <- (predict(model_kr1svm, data_GM)+predict(model_kr1rf, data_GM))/2
+accuracy1 = tibble(x = data_GM$kr_1, y = predictions1)
+accuracy1%>%
+  ggplot(aes(x,y))+
+  geom_point()+
+  geom_abline(slope = 1, linetype = 2)
+
+t.test(accuracy1$x,accuracy1$y)
+
+predictions2 <- (predict(model_kr2svm, data_GM)+predict(model_kr2rf, data_GM))/2
+accuracy2 = tibble(x = data_GM$kr_2, y = predictions2)
+accuracy2%>%
+  ggplot(aes(x,y))+
+  geom_point()+
+  geom_abline(slope = 1, linetype = 2)
+t.test(accuracy2$x,accuracy2$y)
+
+predictions3 <- (predict(model_kr3svm, data_GM)+predict(model_kr3rf, data_GM))/2
+accuracy3 = tibble(x = data_GM$kr_3, y = predictions3)
+accuracy3%>%
+  ggplot(aes(x,y))+
+  geom_point()+
+  geom_abline(slope = 1, linetype = 2)
+tt <- t.test(accuracy3$x,accuracy3$y)
+
+################################
+predictions1 <- predict(model_kr1svm, data_GM)
+accuracy1 = tibble(x = data_GM$kr_1, y = predictions1)
+accuracy1%>%
+  ggplot(aes(x,y))+
+  geom_point()+
+  geom_abline(slope = 1, linetype = 2)
+
+t.test(accuracy1$x,accuracy1$y)
+
+predictions2 <- predict(model_kr2svm, data_GM)
+accuracy2 = tibble(x = data_GM$kr_2, y = predictions2)
+accuracy2%>%
+  ggplot(aes(x,y))+
+  geom_point()+
+  geom_abline(slope = 1, linetype = 2)
+t.test(accuracy2$x,accuracy2$y)
+
+predictions3 <- predict(model_kr3svm, data_GM)
+accuracy3 = tibble(x = data_GM$kr_3, y = predictions3)
+accuracy3%>%
+  ggplot(aes(x,y))+
+  geom_point()+
+  geom_abline(slope = 1, linetype = 2)
+tt <- t.test(accuracy3$x,accuracy3$y)
+
+
+
+```
+
+```{r morris}
+model_list <- list(model_kr1svm,model_kr1rf,
+                   model_kr2svm,model_kr2rf,
+                   model_kr3svm,model_kr3rf)
+
+mor <- Morris_GM(model_list)
+mor %>% ggplot(aes(mu,sigma))+
+    geom_point(aes(colour = name), size = 5, alpha = 0.8)+
+    geom_abline(slope = 1, linetype = 2)+
+    #geom_text(aes(label = name), vjust = 0, nudge_y = 0.0000002)+
+    facet_wrap(~apo)+
+    theme_dark()+
+    viridis::scale_colour_viridis(discrete = T)
+```
+
+```{r FAST}
+
+Fas <- Fast_GM(model_list)
+Fas %>%
+  ggplot(aes(name, y = as.numeric(effect), fill = main, group = apo))+
+  geom_bar(stat = "identity", position = "stack" )+
+  ylim(0,1)+
+  ylab("% var explained")+
+  xlab("input")+
+  coord_flip()+
+  theme_classic()+
+  facet_wrap(~apo)
+```
+
+```{r Sobol}
+
+S = NULL
+for(i in 1:20){
+  print(i)
+  Sob <- Sobol_GM(model_list)
+  S <- rbind(S, Sob%>%mutate(repet = i))
+}
+S %>%
+  dplyr::group_by(name, main, apo)%>%
+  dplyr::summarise(y = mean(as.numeric(effect)))%>%
+  ungroup()%>%arrange(desc(main))%>%
+  ggplot(aes(name, y = y, fill = main, group = apo))+
+  geom_bar(stat = "identity", position = "stack" )+
+  ylab("% var explained")+
+  xlab("input")+
+  ylim(0,1)+
+  coord_flip()+
+  theme_classic()+
+  facet_wrap(~apo)
+
+```
+
+```{r}
+
+data <- test_model(model_list)
+
+for(i in descr){
+  print(data%>%
+  filter(type == i)%>%
+  ggplot(aes_string(i, "kr_1"))+
+  geom_point()+
+  ylim(min(data$kr_1), max(data$kr_1))+
+  facet_wrap(~updown))
+}
+
+
+```

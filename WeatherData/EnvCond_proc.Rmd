@@ -1,0 +1,246 @@
+---
+title: "Selection proc for environment"
+output: html_document
+---
+
+# Generation of weather events
+
+data from POWER Project Data Sets: https://power.larc.nasa.gov/
+FAO chap 6 ET0
+Crop coeff & ET computed from Campos et al 2017 (Kc - Kc_mid)
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(nasapower)
+library(tidyverse)
+library(readxl)
+`%!in%` <- compose(`!`, `%in%`)
+source("~/Thesis/2019-11 GSUA/env/get_weather.R")
+
+```
+
+
+```{r}
+# Load coordinate of all locations
+gps <- read.csv("~/Thesis/2019-11 GSUA/gps.csv")%>%
+  mutate(ID = X1)%>%
+  select(-X1)
+
+ID <- tibble(ID = sort(rep(1:nrow(gps),21)),
+             YEAR = rep(2000:2020,nrow(gps)))
+
+loc <- left_join(ID, gps, by = "ID")
+
+```
+
+```{r}
+
+# BWeather <- read.csv("~/Weather_data.csv")%>%select(-X)%>%mutate(local = as.character(local))
+
+BWeather = NULL
+
+for (i in 1210:nrow(loc)) {
+  message(paste0("-------- ",round(i/nrow(loc)*100,3), " % done --------"))
+  ####################################
+  year <- loc$YEAR[i]
+  print(year)
+  ################################### 
+  print(loc$cities[i])
+  ###################################
+  lat <- loc$latitude[i]
+  lon <- loc$longitude[i]
+  k <- 1
+  daily_ag <- try(get_weather(lon, lat, year), silent = T)
+  while(class(daily_ag[[1]]) == "try-error"){
+    daily_ag <- try(get_weather(lon, lat, year), silent = T)
+    k <- k+1
+    if(k > 20){next()}
+  }
+  daily_ag$local <- as.character(loc$location[i])
+  daily_ag$YYYYMMDD <- factor(daily_ag$YYYYMMDD)
+  BWeather <- rbind(BWeather, daily_ag)
+}
+
+write.csv(BWeather, "~/Weather_data.csv")
+
+
+```
+
+```{r}
+BWeather <- read.csv("~/Weather_data.csv")%>%select(-X)%>%mutate(local = as.character(local))
+
+BWeather <- BWeather %>%
+    mutate(Wpot = -1.06*(T2M+273.3)*log10(100/RH2M), # Water potential MPa
+           e_t = 0.6108*exp((17.27*T2M)/(T2M+237.3)), # 
+           e_tmin = 0.6108*exp((17.27*T2M_MIN)/(T2M_MIN+237.3)),
+           e_tmax = 0.6108*exp((17.27*T2M_MAX)/(T2M_MAX+237.3)),
+           e_a = 0.6108*exp((17.27*T2MDEW)/(T2MDEW+237.3)), # actual vapor pressure kPa
+           e_s = (e_tmax+e_tmin)/2, # saturation vapor pressure kPa
+           VPD = e_s-e_a,
+           delta = 4098 * e_t / (T2M +237.3)^2,
+           gama = (0.665*10^-3)*PS,
+           gd = T2M-10)
+  
+  BWeather <- BWeather%>%
+    mutate(Rns = (1-0.23)*ALLSKY_SFC_SW_DWN,
+           Rnl = (4.903*10^-9)*((T2M_MAX+273.16*2+T2M_MIN)/2)*(0.34-0.14*sqrt(e_a))*(1.35*(ratio)-0.35),
+           Rn = Rns-Rnl,
+           ET0 = (0.408*delta*Rn+gama*(900/(T2M+273))*WS2M*(e_s-e_a))/(delta+gama*(1+0.34*WS2M)),
+           Kc = 1.1*(1-exp(-(GDD/620)^3))+0.1, # based on Campos et al 2017 Kc point and FAO chap 6 ET0 - Kc_mid
+           ET = Kc*ET0)
+
+```
+
+```{r}
+
+# generic data for clustering 
+SBW <- BWeather%>%
+  filter(DOY < 136+30)%>%
+  mutate(rain = ifelse(PRECTOT > 0, 1, 0))%>%
+  dplyr::group_by(local, YEAR)%>%
+  dplyr::summarise(sum_PREC = sum(PRECTOT),
+                   mean_TDEW = mean(T2MDEW),
+                   mean_RH2M = mean(RH2M),
+                   Wind = mean(WS2M),
+                   mean_T2M = mean(T2M),
+                   min_T2M = mean(T2M_MIN),
+                   SKY = mean(ALLSKY_SFC_SW_DWN),
+                   max_T2M = mean(T2M_MAX),
+                   mean_ET0 = mean(ET0),
+                   mean_gama = mean(gama),
+                   ET = max(ET),
+                   n_GDD_10 = max(GDD),
+                   n_raindays = sum(rain),
+                   n_dry = sum(abs(rain-1)),
+                   n_GDD = sum(T2M),
+                   m_VPD = mean(VPD))%>%
+  ungroup()%>%
+  select(local, YEAR, sum_PREC, mean_T2M, mean_ET0, n_dry, n_GDD)
+
+Eucl_dist <- dist(scale(SBW%>%select(-local, -YEAR))) # , -n_GDD_10
+hcl <- hclust(Eucl_dist, method = "ward.D2")
+SBW<- SBW%>%
+  mutate(clust = cutree(hcl, k = 4))
+
+pca <- prcomp(SBW%>%select(-local, -YEAR, -clust), scale = TRUE) # -n_GDD_10, -clust, -n_raindays
+
+eig <- pca$sdev^2
+
+bp <- cbind(x = paste0("PC", 1:length(eig)), y= c(eig*100/sum(eig)))%>%
+  as.tibble()%>%
+  mutate(y = as.numeric(y))
+
+bp%>%
+  arrange(-y)%>%
+  mutate(x= factor(x,x))%>%
+  ggplot(aes(x,y))+
+  geom_bar(stat="identity", fill="#69b3a2")+
+  ylab("% of the variance")
+
+
+pca_plot <- cbind(PCA1 = pca$x[,1], PCA2 = pca$x[,2],
+                  PCA3 = pca$x[,3],
+                  rota1 = pca$rotation[,"PC1"]*15,
+                  rota2 = pca$rotation[,"PC2"]*15,
+                  rota3 = pca$rotation[,"PC3"]*15,
+                  labels = row.names(pca$rotation))%>%
+  as.tibble()%>%
+  mutate(PCA1 = as.numeric(PCA1),
+         PCA2 = as.numeric(PCA2),
+         PCA3 = as.numeric(PCA3),
+         rota1 = as.numeric(rota1),
+         rota2 = as.numeric(rota2),
+         rota3 = as.numeric(rota3),
+         clust = SBW$clust,
+         ID = SBW$local,
+         YEAR = SBW$YEAR)
+
+pca_plot%>%
+  ggplot(aes(PCA1, PCA2))+
+  geom_point(aes(colour = clust), size = 3, alpha = 0.5)+
+  geom_hline(yintercept = 0, lty = 2)+
+  geom_vline(xintercept = 0, lty = 2)+
+  geom_segment(aes(x = 0, y = 0, xend =  rota1, yend = rota2), colour = "blue", linetype = 3)+
+  geom_text(aes(x= rota1, y = rota2, label = labels), alpha =0.02, check_overlap = F)+
+  xlab(paste0("PC axis 1 (",round(bp$y[1],1)," %)" ))+
+  ylab(paste0("PC axis 2 (",round(bp$y[2],1)," %)" ))+
+  viridis::scale_colour_viridis()
+
+
+
+```
+
+```{r}
+
+clo <- pca_plot%>%
+  dplyr::group_by(clust)%>%
+  dplyr::summarise(m_PCA1 = mean(PCA1),
+                   m_PCA2 = mean(PCA2))%>%
+  ungroup()
+
+data <- left_join(pca_plot, clo, by = "clust")%>%
+  mutate(euc = sqrt((PCA1-m_PCA1)^2 + (PCA2-m_PCA2)^2))
+
+been_there = WW <- NULL
+for(i in 1:4){
+  message("--------------------")
+  id <- data$ID[data$clust == i][ which(data$euc[data$clust == i] == min(data$euc[data$clust == i]))]
+  print(id)
+  year <- data$YEAR[data$clust == i][ which(data$euc[data$clust == i] == min(data$euc[data$clust == i]))]
+  print(year)
+
+  been_there = c(been_there , id)
+  
+  WW <- c(WW, paste0(id,year))
+  data <- data%>%filter(ID %!in% been_there )
+}
+
+pca_plot%>%
+  mutate(ww = paste0(ID,YEAR))%>%
+  filter(ww %in% WW)%>%
+  ggplot(aes(PCA1, PCA2))+
+  geom_point(aes(colour = factor(clust)), size = 2, alpha = 0.1, data = pca_plot)+
+  geom_point(aes(colour = factor(clust)), size = 4, alpha = 1)+
+  geom_hline(yintercept = 0, lty = 2)+
+  geom_vline(xintercept = 0, lty = 2)+
+  geom_segment(aes(x = 0, y = 0, xend =  rota1, yend = rota2), colour = "blue", linetype = 3)+
+  geom_text(aes(x= rota1, y = rota2, label = labels), alpha =0.02, check_overlap = F)+
+  xlab(paste0("PC axis 1 (",round(bp$y[1],1)," %)" ))+
+  ylab(paste0("PC axis 2 (",round(bp$y[2],1)," %)" ))+
+  viridis::scale_colour_viridis(discrete = T)
+
+
+SBW%>%
+  mutate(ww = paste0(local,YEAR))%>%
+  filter(ww %in% WW)%>%
+  ggplot()+
+  geom_point(aes(mean_T2M, n_dry, colour = factor(clust)), size = 2, alpha = 0.1, data = SBW)+
+  geom_point(aes(mean_T2M, n_dry, colour = factor(clust)), size = 4, alpha =1)+
+  viridis::scale_colour_viridis(discrete = T)
+
+#WW[c(1,3,4,8)]
+WW <- c("Madrid, Spain2015", "Palermo, Italy2018")
+
+SBW%>%
+  mutate(ww = paste0(local,YEAR))%>%
+  filter(ww %in% WW)%>%
+  ggplot()+
+  geom_point(aes(mean_ET0, n_dry, colour = factor(clust)), size = 2, alpha = 0.1, data = SBW)+
+  geom_point(aes(mean_ET0, n_dry, colour = factor(clust)), size = 4, alpha =0.5)+
+  viridis::scale_colour_viridis(discrete = T)
+
+```
+
+```{r}
+
+WEATHER <- BWeather %>%
+  mutate(ww = paste0(local,YEAR))%>%
+  filter(ww %in% WW)%>%
+  select(-ww)
+
+write.csv(WEATHER, "~/Thesis/2020-10 HydraulicViper/Env/Weather_2loc30days.csv")
+
+```
+
