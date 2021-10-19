@@ -9,10 +9,8 @@ library(viridis)
 library(readxl)
 library(caret)
 library(sensitivity)
-setwd(dir = "~/Thesis/2020-10 HydraulicViper/")
-source("~/Thesis/2020-10 HydraulicViper/GRANAR/R/granar.R")
-source("~/Thesis/2020-10 HydraulicViper/GRANAR/R/micro_hydro.R")
-source("Anat_proc/machine_learning.r")
+source("./R/granar.R")
+source("./R/micro_hydro.R")
 
 makeMCSample <- function(n, vals, p = 1) {
   # Packages to generate quasi-random sequences
@@ -43,13 +41,11 @@ makeMCSample <- function(n, vals, p = 1) {
   return(samp)
 }
 
-
 Rootdata <- function(n, vals){
   require("sensitivity")
-  setwd(dir = "~/Thesis/2020-10 HydraulicViper/")
-  dataS5 <- read.csv("./Digitize_plot/Data for Fig. S5.csv")
-  Sum_up <- read_excel("~/Thesis/2019-01 GRANAR/Validation/Sum_up_03.xlsx", col_types = c("text", rep("numeric", 22)))
-  sct <- read_csv("GRANAR/www/sct_B73.csv")
+  dataS5 <- read.csv("./HydraulicAnatomy/Data for Fig. S5.csv")
+  Sum_up <- read_excel("./HydraulicAnatomy/Sum_up_03.xlsx", col_types = c("text", rep("numeric", 22)))
+  sct <- read_csv("./HydraulicAnatomy/www/sct_B73.csv")
   
   Sum_up <- Sum_up%>%
     mutate(r_CT = sqrt(RXSA/pi),
@@ -377,13 +373,13 @@ train_model <- function(data_GM, n_rep = 5){
       
       if(est == "kr_1"){
         if(tmp_svm$nrrmse < memo[1]){
-          save(fit.svm, file = "~/Thesis/2020-10 HydraulicViper/Anat_proc/svm_model_kr1.RData")
+          save(fit.svm, file = "./R/GRANAR/rf/svm_model_kr1.RData")
           model_kr1 = fit.svm
           memo[1] <- tmp_svm$nrrmse 
         }
         if(tmp_mm$nrrmse < memo[1]){
-          save(fit.rf, file = "~/Thesis/2020-10 HydraulicViper/Anat_proc/rf_model_kr1.RData")
-          save(fit.rf, file = "~/Thesis/2020-10 HydraulicViper/Anat_proc/rf_model_kr1.RData")
+          save(fit.rf, file = "./R/GRANAR/rf/rf_model_kr1.RData")
+          save(fit.rf, file = "./R/GRANAR/rf/rf_model_kr1.RData")
           model_kr1 = fit.rf
           memo[1] <- tmp_rf$nrrmse 
         }
@@ -391,26 +387,26 @@ train_model <- function(data_GM, n_rep = 5){
       }
       if(est == "kr_2"){
         if(tmp_svm$nrrmse < memo[2]){
-          save(fit.svm, file = "~/Thesis/2020-10 HydraulicViper/Anat_proc/svm_model_kr2.RData")
+          save(fit.svm, file = "./R/GRANAR/rf/svm_model_kr2.RData")
           model_kr2 = fit.svm
           memo[2] <- tmp_svm$nrrmse 
         }
         if(tmp_mm$nrrmse < memo[2]){
-          save(fit.svm, file = "~/Thesis/2020-10 HydraulicViper/Anat_proc/svm_model_kr2.RData")
-          save(fit.rf, file = "~/Thesis/2020-10 HydraulicViper/Anat_proc/rf_model_kr2.RData")
+          save(fit.svm, file = "./R/GRANAR/rf/svm_model_kr2.RData")
+          save(fit.rf, file = "./R/GRANAR/rf/rf_model_kr2.RData")
           model_kr2 = fit.rf
           memo[2] <- tmp_rf$nrrmse 
         }
       }
       if(est == "kr_3"){
         if(tmp_svm$nrrmse < memo[3]){
-          save(fit.svm, file = "~/Thesis/2020-10 HydraulicViper/Anat_proc/svm_model_kr3.RData")
+          save(fit.svm, file = "./R/GRANAR/rf/svm_model_kr3.RData")
           model_kr3 = fit.svm
           memo[3] <- tmp_svm$nrrmse 
         }
         if(tmp_mm$nrrmse < memo[3]){
-          save(fit.svm, file = "~/Thesis/2020-10 HydraulicViper/Anat_proc/svm_model_kr3.RData")
-          save(fit.rf, file = "~/Thesis/2020-10 HydraulicViper/Anat_proc/rf_model_kr3.RData")
+          save(fit.svm, file = "./R/GRANAR/rf/svm_model_kr3.RData")
+          save(fit.rf, file = "./R/GRANAR/rf/rf_model_kr3.RData")
           model_kr3 = fit.rf
           memo[3] <- tmp_rf$nrrmse 
         }

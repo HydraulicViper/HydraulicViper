@@ -1,0 +1,1708 @@
+---
+title: "Using machin learning algorithm to by pass GRANAR & MECHA"
+author: "Adrien Heymans"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+setwd(dir = "~/Thesis/2020-10 HydraulicViper/")
+library(tidyverse)
+library(plyr)
+library(deldir)
+library(alphahull)
+library(xml2)
+library(sp)
+library(viridis)
+library(readxl)
+
+source("./GRANAR/R/granar.R")
+
+source("./GRANAR/R/micro_hydro.R")
+`%!in%` <- compose(`!`, `%in%`)
+print("loading params")
+params <- read_param_xml("./GRANAR/www/Zea_mays_CT.xml")
+
+source("./Anat_proc/SobolR.R")
+
+source("Anat_proc/machine_learning.r")
+PkgTest(c("randomForest"))
+```
+
+## Alometry between anatomical traits
+
+Many anatomical features are strongly correlate with one another. And thanks to technological improvement that have streamlines the quatification of anatomical features, huge data sets that contain anatomical traits are available.
+
+Here, we gathered, from 9 different study, different data sets of anatomical features to create a unique anatomical table. Then, we look out for strong correlation between anatomical features.
+
+Usually the strong linear realtionship between anatomical feautures are found when the natural logarithm is taken. 
+
+
+```{r, message = F, warning=F, echo=F}
+
+dataS5 <- read.csv("./Digitize_plot/Data for Fig. S5.csv")
+Sum_up <- read_excel("~/Thesis/2019-01 GRANAR/Validation/Sum_up_03.xlsx", col_types = c("text", rep("numeric", 22)))
+sct <- read_csv("GRANAR/www/sct_B73.csv")
+
+Sum_up <- Sum_up%>%
+  mutate(r_CT = sqrt(RXSA/pi),
+         r_stele = sqrt(TSA/pi),
+         d_stele = r_stele*2,
+         r_cortex = r_CT - r_stele)
+sct <- sct %>% 
+  transmute(name = "Heymans et al. 2020",
+         RXSA = pi*(CT/1000)^2,
+         TSA = pi*(stele/1000)^2,
+         XVA = nX*pi*(xylem/2000)^2,
+         CF = CF,
+         n_X = nX)
+dataS5 <- dataS5%>%
+  transmute(name = "Yang et al. 2019",
+         RXSA = RXA,
+         TSA = SXA,
+         XVA = MXA,
+         CF = CF,
+         n_X = MXN)
+
+Data <- Sum_up%>%select(name, RXSA, TSA, XVA, CF, n_X)
+Data$n_X[Data$name == "Burton et al. 2013"] <- NA
+Data <- rbind(Data, sct, dataS5)
+
+Data <- Data %>% mutate(log_RXA = log(RXSA, exp(1)),
+                        log_TSA = log(TSA, exp(1)),
+                        log_XVA = log(XVA, exp(1)),
+                        log_CF = log(CF, exp(1)),
+                        mod_XVA = sqrt(abs(log_XVA)),
+                        log_nX = log(n_X, exp(1)),
+                        CW = sqrt(RXSA/pi)-sqrt(TSA/pi),
+                        log_CW = log(CW))
+
+# ggpairs(Data[,-1])
+
+```
+
+```{r}
+Data%>%
+  ggplot()+
+  geom_point(aes(log_RXA, log_TSA, colour = name), alpha = 0.5, size = 2)+
+  geom_smooth(aes(log_RXA, log_TSA),color = "black", method = "lm", se = F)+
+  theme_dark()+
+  viridis::scale_colour_viridis(discrete = T)+
+  ylab("ln( TSA )")+
+  xlab("ln( RXA )")
+
+fit <- aov(log_TSA ~ log_RXA, data = Data)
+round(cor(Data$log_RXA, Data$log_TSA,  method = "pearson", use = "complete.obs"),4)
+modelr::rsquare(lm(log_TSA ~ log_RXA, data = Data), Data)
+RXA_TSA_coef <- fit$coefficients
+
+Rsquared(fit)
+
+```
+
+For the xylem area, we added another transformation to the natural logarithm to reach the linearity between the Xylem area and the stele area.
+
+```{r}
+
+Data%>%
+  filter(name != "Wahl and ryser 2000")%>%
+  ggplot(aes(log_TSA, mod_XVA))+
+  geom_smooth(color = "black", method = "lm", se = F)+
+  geom_point(aes(colour = name), alpha = 0.3, size = 2)+
+  theme_dark()+
+  viridis::scale_colour_viridis(discrete = T)+
+  ylab("sqrt( | ln( XVA ) | )")+
+  xlab(" ln( TSA )")
+
+fit <- aov(mod_XVA ~ log_TSA, data = Data)
+XVA_TSA_coef <- fit$coefficients
+round(cor(Data$log_TSA, Data$mod_XVA,  method = "pearson", use = "complete.obs"),4)
+modelr::rsquare(lm(mod_XVA ~ log_TSA, data = Data), Data)
+```
+
+Interstingly enough, the number of metaxylem vessels does not follow the same trends as the xylem area conserning the stele area. 
+
+```{r}
+Data%>%
+  ggplot(aes(log_TSA, log_nX))+
+  geom_smooth(color = "black", method = "lm", se = F)+
+  geom_point(aes(colour = name), alpha = 0.3, size = 2)+
+  theme_dark()+
+  viridis::scale_colour_viridis(discrete = T)+
+  ylab("ln( nX )")+xlab(" ln( TSA ) ")
+
+fit <- aov(log_nX ~ log_TSA, data = Data)
+MXN_TSA_coef <- fit$coefficients
+round(cor(Data$log_TSA, Data$log_nX,  method = "pearson", use = "complete.obs"),4)
+modelr::rsquare(lm(log_nX ~ log_TSA, data = Data), Data)
+
+```
+The number of cortex layer for a certain cortex width is correlated but it is keep a strong variation around this alometry.
+
+```{r}
+Data%>%
+  ggplot(aes(log_CW, log_CF))+
+  geom_smooth(color = "black", method = "lm", se = F)+
+  geom_point(aes(colour = name), alpha = 0.3, size = 2)+
+  viridis::scale_colour_viridis(discrete = T)+
+  theme_dark()+
+  ylab(" ln( CF )")+
+  xlab(" ln( CW )")
+
+fit <- aov(log_CF ~ log_CW, data = Data)
+CF_CW_coef <- fit$coefficients
+round(cor(Data$log_CW, Data$log_CF,  method = "pearson", use = "complete.obs"),4)
+modelr::rsquare(lm(log_CF ~ log_CW, data = Data), Data)
+
+```
+
+From the relationship that we build previously, we are now able to recreate a mean root cross section from any root that we know the radius.
+B addition of a few variation parameter, we can recreate also the variation around the anatomical feature that are observed in this meta analysis.
+
+
+```{r, eval=F}
+
+vals <- list(list(var="radius",dist="unif",params=list(min=0.1,max=1.5)),
+             list(var="var_stele",dist="unif",params=list(min=-0.3,max=0.4)),
+             list(var="var_xylem",dist="unif",params=list(min=-0.3,max=0.3)),
+             list(var="aerenchyma",dist="unif",params=list(min=0,max=0.5)),
+             list(var="kw",dist="unif",params=list(min=0.1*2.4E-4,max=10*2.4E-4)),
+             list(var="km",dist="unif",params=list(min=0.1*3E-5,max=10*3E-5)),
+             list(var="kAQP",dist="unif",params=list(min=0.1*4.3E-4,max=10*4.3E-4)),
+             list(var="kpl",dist="unif",params=list(min=0.01*5.3E-12,max=100*5.3E-12)),
+             list(var="thickness",dist="unif",params=list(min=0.8,max=2)))
+n <- 2000
+Sampl <- makeMCSample(n,vals)
+Sampl <- Sampl%>%
+  mutate(log_RXA = log(pi*radius^2),
+         RXA = exp(log_RXA),
+         log_TSA = RXA_TSA_coef[1]+RXA_TSA_coef[2]*log_RXA,
+         TSA = exp(log_TSA)+var_stele*exp(log_TSA),
+         log_TSA = log(TSA, exp(1)),
+         r_stele = sqrt(TSA/pi),
+         log_nX = MXN_TSA_coef[1]+MXN_TSA_coef[2]*log_TSA,
+         nX = exp(log_nX),
+         mod_XVA = XVA_TSA_coef[1]+XVA_TSA_coef[2]*log_TSA,
+         MXA = exp(-mod_XVA^2)+var_xylem*exp(-mod_XVA^2),
+         XVA = MXA,
+         X_size = 2*sqrt((MXA/nX)/pi),
+         log_CW = log(radius-r_stele, exp(1)),
+         CF = exp(CF_CW_coef[1]+CF_CW_coef[2]*log_CW),
+         OneC = exp(log_CW)/CF,
+         PXA_1 = (OneC/2.2)^2,
+         ratio = (2+0.07456*r_stele*1000)/nX,
+         nPX = round(nX*ratio),
+         PXA = nPX*PXA_1,
+         a = PXA_1*1000^2,
+         k_protxyl_s = a^2/(8*pi*200*1E-5/3600/24)*1E-12,
+         # kx when only the proto xylem have their cell wall lignified 
+         kx_unM = k_protxyl_s*nPX*200/1E4,
+         LMXA = MXA - PXA,
+         LMXA_1 = LMXA/nX,
+         b = LMXA_1*1000^2,
+         k_Mxyl_s = b^2/(8*pi*200*1E-5/3600/24)*1E-12,
+         # kx when all xylem elements have their cell wall lignifiedk
+         kx_M = k_Mxyl_s*nX*200/1E4 + kx_unM,
+         TCA = RXA-TSA,
+         aerenchyma = ifelse(radius < 0.2, aerenchyma/10, aerenchyma)) # if radius is less than 200 micro-m, then reduce ten fold the aerenchyma proportion
+summary(Sampl)
+
+
+ write.csv(Sampl, "./Anat_proc/input.csv")
+```
+
+```{r, echo= F}
+Sampl <- read.csv("./Anat_proc/input.csv")%>%
+  mutate(sampl_id = X)
+
+Sampl_vect <- 1:nrow(Sampl)
+fls <- list.files("./MECHA/cellsetdata/wide/")
+fls <- fls[grepl("root_", fls)]
+done <- parse_number(fls)
+Sampl_vect <- Sampl_vect[Sampl_vect %!in% done]
+
+```
+
+To create a data sets that encompass the variability found in the meta-analysis but with only a thousand of points, we used a Mat - Sobol algorithm to sample input parameters. Those input parameters will be used for the reconstruction of the root cell network anatomy (with GRANAR) and the estimation of the macro hydraulic properties (with MECHA).
+
+
+```{r}
+
+Sampl%>%
+  ggplot()+
+  geom_point(aes(radius, r_stele))+
+  geom_point(aes(sqrt(RXSA/pi), sqrt(TSA/pi)), alpha = 0.2, colour = "red",data = Data)+
+  ylab("stele radius")
+
+Sampl%>%
+  ggplot()+
+  geom_point(aes(radius, round(CF)), alpha = 0.3)+
+  geom_point(aes(sqrt(RXSA/pi), CF), alpha = 0.2, colour = "red", data = Data)+
+  ylab("number of Cortex layer")
+
+Sampl%>%
+  ggplot()+
+  geom_point(aes(radius, round(nX)), alpha = 0.3)+
+  geom_point(aes(sqrt(RXSA/pi), n_X), alpha = 0.2, colour = "red", data = Data)+
+  ylab("number of metaxylem vessels")
+
+Sampl%>%
+  ggplot()+
+  geom_point(aes(radius, XVA), alpha = 0.3)+
+  geom_point(aes(sqrt(RXSA/pi), XVA), alpha = 0.2, colour = "red", data = Data)+
+  ylab("Xylem area")
+
+Sampl%>%
+  ggplot()+
+  geom_point(aes(radius, OneC), alpha = 0.3)+
+  geom_point(aes(sqrt(RXSA/pi), CW/CF), alpha = 0.2, colour = "red", data = Data)+
+  ylab("Cortex cell diameter")
+
+```
+
+
+```{r GRANAR1, eval = F}
+
+vect <- Sampl$n[Sampl$radius %in% c(min(Sampl$radius), max(Sampl$radius))]
+
+for(i in vect){
+  tmp_sampl <- Sampl[i,]
+  # if(file.exists("./MECHA/cellsetdata/current_root.xml")){
+  #   file.remove("./MECHA/cellsetdata/current_root.xml")
+  #   file.remove("./MECHA/Projects/GRANAR/in/Maize_Geometry_aer.xml")
+  # }
+  
+  sim <- run_granar(params, tmp_sampl)
+  
+  # file.copy("./MECHA/cellsetdata/current_root.xml", paste0("./MECHA/cellsetdata/root_",i,".xml"), overwrite = T)
+  # file.copy("./MECHA/Projects/GRANAR/in/Maize_Geometry_aer.xml",
+  #           paste0( "./MECHA/Projects/GRANAR/in/Maize_Geometry_aer_",i,".xml"), overwrite = T)
+  pl <- plot_anatomy(sim)
+  print(pl)
+}
+
+```
+
+```{r MECHA proc 2, eval = F}
+
+fls <- list.files("./MECHA/cellsetdata/")
+fls <- fls[grepl("root_", fls)]
+fls <- fls[fls != "current_root.xml"]
+
+fls_done <- list.files("./MECHA/Projects/GRANAR/out/M1v4/Root/")
+fls_done <- fls_done[grepl(".txt", fls_done)]
+num_done <- parse_number(unique(unlist(str_split(fls_done,"_"))[grepl(".txt", unlist(str_split(fls_done,"_")))]))
+num_done <- c(num_done)
+fls_done <- unlist(str_split(paste0("root_",num_done,".xml", collapse = " "), " "))
+
+fls <- fls[fls %!in% fls_done]
+
+for(j in sample(fls)){
+  message("--------------")
+  print(j)
+  message("--------------")
+  
+  if(file.exists("./MECHA/Projects/GRANAR/out/M1v4/Root/Project_Test/results/Macro_prop_1,0.txt")){
+    file.remove("./MECHA/Projects/GRANAR/out/M1v4/Root/Project_Test/results/Macro_prop_1,0.txt")
+    file.remove("./MECHA/Projects/GRANAR/out/M1v4/Root/Project_Test/results/Macro_prop_2,1.txt")
+    file.remove("./MECHA/Projects/GRANAR/out/M1v4/Root/Project_Test/results/Macro_prop_4,2.txt")
+    file.remove("./MECHA/cellsetdata/current_root.xml")
+    file.remove("./MECHA/Projects/GRANAR/in/Maize_Geometry_aer.xml")
+  }
+  
+  fc <- file.copy(paste0("./MECHA/cellsetdata/",j), "./MECHA/cellsetdata/current_root.xml", overwrite = T)
+  if(fc == FALSE){break}
+  file.copy(paste0("./MECHA/Projects/GRANAR/in/Maize_Geometry_aer_", parse_number(j), ".xml"),
+              paste0("./MECHA/Projects/GRANAR/in/Maize_Geometry_aer.xml"), overwrite = T)
+  
+  # MECHA input change
+  id <- parse_number(j) 
+  microhydro(path = "MECHA/Projects/GRANAR/in/Maize_Geometry_aer.xml",
+             kw = Sampl$kw[parse_number(j)],
+             km = Sampl$km[parse_number(j)], 
+             kAQP = Sampl$kAQP[parse_number(j)],
+             kpl = Sampl$kpl[parse_number(j)])
+  
+  wallthick(thickness = Sampl$thickness[parse_number(j)])
+  
+  # Run MECHA - - - - - - - 
+
+  system("C:/Users/heymansad/AppData/Local/Continuum/anaconda3/envs/MECHA/python.exe MECHA/MECHAv4_GRANAR.py")
+  system("C:/Users/heymansad/AppData/Local/Continuum/anaconda3/envs/MECHA/python.exe MECHA/MECHAv4_septa.py")
+  message("python script has ended")
+  
+  # if works well then
+  if(file.exists("./MECHA/Projects/GRANAR/out/M1v4/Root/Project_Test/results/Macro_prop_1,0.txt")){
+    
+    message ("success")
+    file.copy("./MECHA/Projects/GRANAR/out/M1v4/Root/Project_Test/results/Macro_prop_1,0.txt",
+              paste0("./MECHA/Projects/GRANAR/out/M1v4/Root/Macro_prop_1,0_",id,".txt"), overwrite = T)
+    file.copy("./MECHA/Projects/GRANAR/out/M1v4/Root/Project_Test/results/Macro_prop_2,1.txt",
+              paste0("./MECHA/Projects/GRANAR/out/M1v4/Root/Macro_prop_2,1_",id,".txt"), overwrite = T)
+    file.copy("./MECHA/Projects/GRANAR/out/M1v4/Root/Project_Test/results/Macro_prop_4,2.txt",
+              paste0("./MECHA/Projects/GRANAR/out/M1v4/Root/Macro_prop_4,2_",id,".txt"), overwrite = T)
+  }else{message ("fail and move to next simulation")}
+
+  
+}
+
+
+
+```
+
+```{r}
+
+fls <- list.files("./MECHA/cellsetdata/wide/")
+fls <- fls[grepl("root_", fls)]
+fls <- paste0("wide/",fls)
+
+Out <- batch_Gmeta(fls)
+
+```
+
+```{r}
+
+fls <- list.files("./MECHA/Projects/GRANAR/out/wide/")
+fls <- fls[grepl(".txt", fls)]
+
+K <- tibble(kr = NULL, kx = NULL, sampl_id = NULL, apo = NULL)
+for (k in fls){
+  M <- read_file(paste0("./MECHA/Projects/GRANAR/out/wide/",k))
+  tmp_M <- strsplit(M, split="\n")[[1]]
+  K_xyl_spec <- as.numeric(strsplit(tmp_M[15], " ")[[1]][5])
+  kr_M <- as.numeric(strsplit(tmp_M[17], " ")[[1]][4])
+  scenario <- round(parse_number(unlist(str_split(k,"_"))[3])/10)
+  sampl_id <- parse_number(unlist(str_split(k,"_"))[4])
+  if(sampl_id == 1866){
+    next
+  }
+  
+  K <- rbind(K, tibble(kr = kr_M, kx = K_xyl_spec, sampl_id = sampl_id, apo = scenario))
+}
+
+K <- K%>%arrange(sampl_id)
+
+missing = K$sampl_id[K$apo == 2]
+
+K <- K %>% filter(sampl_id %in% missing)
+
+K <- tibble(kr_1 = K$kr[K$apo == 1],
+            kr_2 = K$kr[K$apo == 2],
+            kr_3 = K$kr[K$apo == 4],
+            log_kx = log(K$kx[K$apo == 1]),
+            sampl_id = K$sampl_id[K$apo == 1])
+
+
+Samp_kpl_uniform = Sampl%>%mutate(kpl = 5.3E-12)
+
+data_GM_uni = left_join(K, Samp_kpl_uniform, by = "sampl_id")%>%
+  mutate(id = sampl_id)
+
+# With Kpl var 
+
+fls <- list.files("./MECHA/Projects/GRANAR/out/wide_pl/")
+fls <- fls[grepl(".txt", fls)]
+
+Kplasmo <- tibble(kr = NULL, kx = NULL, sampl_id = NULL, apo = NULL)
+for (k in fls){
+  M <- read_file(paste0("./MECHA/Projects/GRANAR/out/wide_pl/",k))
+  tmp_M <- strsplit(M, split="\n")[[1]]
+  K_xyl_spec <- as.numeric(strsplit(tmp_M[15], " ")[[1]][5])
+  kr_M <- as.numeric(strsplit(tmp_M[17], " ")[[1]][4])
+  scenario <- round(parse_number(unlist(str_split(k,"_"))[3])/10)
+  sampl_id <- parse_number(unlist(str_split(k,"_"))[4])
+
+  Kplasmo <- rbind(Kplasmo, tibble(kr = kr_M, kx = K_xyl_spec, sampl_id = sampl_id, apo = scenario))
+}
+
+Kplasmo <- Kplasmo%>%arrange(sampl_id)
+
+missing = Kplasmo$sampl_id[Kplasmo$apo == 2]
+
+Kplasmo <- Kplasmo %>% filter(sampl_id %in% missing)
+
+Kplasmo <- tibble(kr_1 = Kplasmo$kr[Kplasmo$apo == 1],
+                  kr_2 = Kplasmo$kr[Kplasmo$apo == 2],
+                  kr_3 = Kplasmo$kr[Kplasmo$apo == 4],
+                  log_kx = log(Kplasmo$kx[Kplasmo$apo == 1]),
+                  sampl_id = Kplasmo$sampl_id[Kplasmo$apo == 1])
+
+
+data_GM_plasmo = left_join(Kplasmo, Sampl, by = "sampl_id")%>%
+  mutate(id = sampl_id)
+
+All_data <- rbind(data_GM_uni, data_GM_plasmo)
+
+# Next with Out
+
+data_GM <- merge(Out, K, by = "sampl_id")
+data_GM <- merge(data_GM , Sampl%>%select(sampl_id, km, kw, kpl, kAQP, thickness), by = "sampl_id")
+data_GM <- data_GM%>%select(-TSA_in, -MXA_in, -log_kx)%>%
+  mutate(cortex_w = sqrt(RXA/pi)-sqrt(TSA/pi),
+         stele_r = sqrt(TSA/pi),
+         radius = sqrt(RXA/pi),
+         pA = AA/TCA)
+
+```
+
+```{r}
+write.csv(All_data, "./data_GRANAR_MECHA.csv")
+
+All_data <- read.csv("./data_GRANAR_MECHA.csv")
+```
+
+```{r}
+
+data_GM <- read.csv("./data_GRANAR_MECHA.csv")%>%
+  select(-X)
+
+
+
+data_GM%>%
+  ggplot()+
+  geom_point(aes(radius, r_stele))+
+  geom_point(aes(sqrt(RXSA/pi), sqrt(TSA/pi)), alpha = 0.2, colour = "red",data = Data)+
+  ylab("stele radius")
+
+data_GM%>%
+  ggplot()+
+  geom_point(aes(radius, round(CF)), alpha = 0.3)+
+  geom_point(aes(sqrt(RXSA/pi), CF), alpha = 0.2, colour = "red", data = Data)+
+  ylab("number of Cortex layer")
+
+data_GM%>%
+  ggplot()+
+  geom_point(aes(radius, round(nX)), alpha = 0.3)+
+  geom_point(aes(sqrt(RXSA/pi), n_X), alpha = 0.2, colour = "red", data = Data)+
+  ylab("number of metaxylem vessels")
+
+data_GM%>%
+  ggplot()+
+  geom_point(aes(radius, XVA), alpha = 0.3)+
+  geom_point(aes(sqrt(RXSA/pi), XVA), alpha = 0.2, colour = "red", data = Data)+
+  ylab("Xylem area")
+
+data_GM%>%
+  ggplot()+
+  geom_point(aes(radius, OneC), alpha = 0.3)+
+  geom_point(aes(sqrt(RXSA/pi), CW/CF), alpha = 0.2, colour = "red", data = Data)+
+  ylab("Cortex cell diameter")
+  
+```
+
+
+```{r}
+All_data%>%
+  ggplot()+
+  geom_point(aes(model_cortex_w, model_kr0, colour = model_pA/100), shape = 3, alpha = 0.3 , data = Sum_up)+
+  geom_point(aes(cortex_w, kr_1, colour = AA/TCA), shape = 1)+
+  xlab("cortex_width")+
+  labs(colour = "Aerenchyma %",
+       shape = "dataset")+
+  viridis::scale_colour_viridis()+
+  theme_dark()
+
+data_GM%>%
+  ggplot()+
+  geom_point(aes(model_cortex_w, model_kr0, colour = model_pA/100), shape = 3, alpha = 0.3 , data = Sum_up)+
+  geom_point(aes(cortex_w, kr_1, colour = AA/TCA), shape = 1)+
+  xlab("cortex_width")+
+  labs(colour = "Aerenchyma %",
+       shape = "dataset")+
+  viridis::scale_colour_viridis()+
+  theme_dark()
+
+data_GM%>%
+  ggplot()+
+  geom_point(aes(model_cortex_w, model_kr0, colour = model_XVA/model_TSA), shape = 3, alpha = 0.7 , data = Sum_up)+
+  geom_point(aes(cortex_w, kr_1, colour = MXA/TSA), shape = 1)+
+  xlab("cortex_width")+
+  labs(colour = "Xylem:Stele ratio",
+       shape = "dataset")+
+  viridis::scale_colour_viridis()+
+  theme_dark()
+
+
+data_GM%>%
+  ggplot()+
+  geom_point(aes(model_cortex_w, model_kr0, colour = model_pA/100), shape = 3, alpha = 0.7 , data = Sum_up)+
+  geom_point(aes(cortex_w, kr_1, colour = AA/TCA), shape = 1)+
+  xlab("cortex_width")+
+  labs(colour = "Aerenchyma %",
+       shape = "dataset")+
+  viridis::scale_colour_viridis()+
+  theme_dark()
+
+
+data_GM%>%
+  ggplot()+
+  geom_point(aes(model_TSA/model_area, model_kr0, colour = model_XVA/model_TSA), shape = 3, alpha =0.3, data = Sum_up)+
+  geom_point(aes(TSA/RXA, kr_1, colour = MXA/TSA))+
+  viridis::scale_colour_viridis()
+
+data_GM%>%
+  filter(km+kAQP < 0.002)%>%
+  ggplot()+
+  geom_point(aes(model_TSA/model_area, model_kr0, colour = km+kAQP), shape = 3, alpha =0.8, data = Sum_up%>%mutate(km = 3*10^(-5), kAQP = 4.3E-4))+
+  geom_point(aes(TSA/RXA, kr_1, colour = km+kAQP))+
+  viridis::scale_colour_viridis()+
+  theme_dark()
+
+All_data%>%
+  ggplot()+
+  geom_point(aes(r_CT, model_kr0, colour = kAQP), shape = 3, alpha = 0.3,data = Sum_up%>%mutate(kAQP = 4.3E-4))+
+  geom_point(aes(radius, kr_1, colour = kAQP))+
+  viridis::scale_colour_viridis()
+
+All_data%>%
+  ggplot()+
+  geom_point(aes(model_pA/100, model_kr0, colour = TCA), alpha = 0.3,shape = 3, data = Sum_up)+
+  geom_point(aes(AA/TCA, kr_1, colour = TCA))+
+  viridis::scale_colour_viridis()
+
+
+data_GM%>%
+  ggplot()+
+  geom_point(aes(model_pA/100, model_kr1, colour = model_TSA/model_area), alpha = 0.3,shape = 3, data = Sum_up)+
+  geom_point(aes(AA/TCA, kr_2, colour = TSA/RXA))+
+  geom_smooth(aes(AA/TCA, kr_2, group = TSA/RXA))+
+  viridis::scale_colour_viridis()
+
+All_data%>%
+  ggplot(aes(km+kAQP, kr_1))+
+  #geom_point(aes(model_pA/100, model_kr0, colour = RXSA), alpha = 0.3,shape = 3, data = Sum_up)+
+  geom_point(aes(colour = radius*2))+
+  geom_smooth(aes(group = round(radius*2), colour = round(radius*2) ))+
+  viridis::scale_colour_viridis()
+  
+data_GM%>%
+  ggplot(aes(km+kAQP, kr_1))+
+  #geom_point(aes(model_pA/100, model_kr0, colour = RXSA), alpha = 0.3,shape = 3, data = Sum_up)+
+  geom_point(aes(colour = pA*10))+
+  geom_smooth(aes(group = round(pA*10), colour = round(pA*10) ))+
+  viridis::scale_colour_viridis()
+
+
+data_GM%>%
+  ggplot(aes(MXA/RXA, kr_1))+
+  #geom_point(aes(model_pA/100, model_kr0, colour = RXSA), alpha = 0.3,shape = 3, data = Sum_up)+
+  geom_point(aes(colour = kAQP))+
+  geom_smooth(aes(group = round(kAQP*1000)))+
+  viridis::scale_colour_viridis()
+```
+
+```{r}
+ggplot()+
+  geom_density(aes(radius), data = Sampl)+
+  geom_density(aes(radius), data = data_GM, colour = "red")
+
+ggplot()+
+  geom_density(aes(kr_1), data = data_GM, colour = "red")
+ggplot()+
+  geom_density(aes(kr_2), data = data_GM, colour = "red")+
+  geom_density(aes(kr_2), data = fGM, colour = "blue")
+ggplot()+
+  geom_density(aes(kr_3), data = data_GM, colour = "red")
+
+
+
+```
+
+
+```{r}
+
+# Classic regression
+
+base <- lm(kr_1~., data_GM%>%select(-kr_2, -kr_3, -sampl_id))
+# summarize the fit
+summary(base)
+# perform step-wise feature selection
+fit <- step(base)
+# summarize the selected model
+summary(fit)
+# make predictions
+predictions <- predict(fit, data_GM%>%select(-kr_2, -kr_3))
+# summarize accuracy
+mse <- mean((data_GM$kr_1 - predictions)^2)
+print(mse)
+
+temp <- data.frame(x = data_GM$kr_1, y = predictions)
+  
+print(
+    ggplot(temp, aes(x, y)) + 
+      geom_point() +
+      geom_abline(slope = 1, intercept = 0, lty=2) + 
+      geom_smooth(method = lm, se = F, color = "red"))
+
+#  ####################
+# new type based on PCA
+library(pls)
+
+# fit model
+fit <- pcr(kr_1~. , data = data_GM%>%select(-kr_2, -kr_3, -sampl_id), validation="CV")
+# summarize the fit
+summary(fit)
+# make predictions
+predictions <- predict(fit, data_GM, ncomp=5)
+# summarize accuracy
+mse <- mean((data_GM$kr_1 - predictions)^2)
+print(mse)
+
+temp <- data.frame(x = data_GM$kr_1, y = as.vector(predictions))
+  
+print(
+    ggplot(temp, aes(x, y)) + 
+      geom_point() +
+      geom_abline(slope = 1, intercept = 0, lty=2) + 
+      geom_smooth(method = lm, se = F, color = "red")
+    )
+
+
+
+```
+
+We used an analysis pipeline from Atkinson et al. 2017 to train a random forest model from our data base to quickly estimate the macro-properties of the root cross section.
+
+
+
+```{r rf_model}
+RES <- NULL
+data_GM <- fGM
+# Combining semi-automated image analysis techniques with machine learning algorithms to accelerate large-scale genetic studies
+# Jonathan A. Atkinson, Guillaume Lobet, Manuel Noll, Patrick E. Meyer, Marcus Griffiths and Darren M. Wells
+
+# Random Forest parameters
+# Vector with the number of models to try
+vec.models <- c(40)                 
+# Vector with the number of tree to try in each model
+vec.trees <- c(100)                  
+# Vector of parameters to estimate with the machine learning
+to_est <- c("kr_1","kr_2","kr_3")
+
+# proportion to use for training
+prop_train = 0.8
+
+global <- data_GM%>%
+  mutate(id = sampl_id)
+# write.csv(global, "data_for_mechanarIA.csv")
+
+summary(global)
+# global <- read.csv("data_for_mechanarIA.csv")
+descriptor <- global%>%select(-kr_1,-kr_2,-kr_3, -sampl_id#, -X
+                              )
+ground_truth <- global%>%select(to_est, id)
+  
+for(rep in c(1:3)){
+  seed <- round(parse_number(unlist(str_split(as.character(Sys.time()), ":"))[3])*10000)
+  set.seed(seed)
+  train_id <- sample(c(1:nrow(ground_truth)), 
+                     size = round(nrow(ground_truth) * prop_train))
+  se <- seed
+  print(seed)
+  train <- ground_truth[train_id,]
+  
+  test <- ground_truth[-train_id,]
+  
+  # Order the data frame based on their id
+  test <- test[order(test$id),]
+  train <- train[order(train$id),]
+  global <- global[order(global$id),]  
+  
+  train <- left_join(train, descriptor, by="id")%>%
+    select(-id)
+  
+  descrs <- colnames(descriptor) [colnames(descriptor) != "id"]
+  descr_ind <- match(descrs, colnames(train))
+  to_est_ind <- match(to_est, colnames(train))
+  descr_ind <- c(descr_ind, to_est_ind)
+  
+  models <- GenerateModels(fname = NULL, 
+                           mat.data = train, 
+                           vec.models = vec.models, 
+                           vec.trees = vec.trees, 
+                           vec.f = to_est_ind, 
+                           vec.p = sort(descr_ind))
+  
+  vec.weights <- rep(1, length(to_est))
+  model <- SelectModel(models, vec.weights)
+  
+   # save(model, file = "Anat_proc/rf_model.RData")
+  
+  test <- merge(test,descriptor, by="id")%>%
+    select(-id)
+  results <- PredictRFs(model, test)
+  
+  results$rep = rep
+  results$seed = se
+  
+  RES <- rbind(RES, results)
+
+}
+
+# write.csv(RES,"./RES.csv" )
+
+```
+
+```{r}
+
+#load("Anat_proc/rf_model.RData")
+
+#-------------------------------------------------------------------
+# COMPARE THE MODELS WITH THE BEST CORRESPONDING  SINGLE LINEAR ESTIMATION
+#-------------------------------------------------------------------
+rf_accuracy <- NULL
+sumdiff <- 0
+sumdiff2 <- 0
+sumr2 <- 0
+rep <- unique(RES$seed)
+# Look at the quality of the estimations
+for(te in to_est){
+  for(i in rep){
+  results <- RES%>%filter(seed == i)
+  
+  estimation <- results[[te]] 
+  truth <- test[[te]]
+  
+  temp <- data.frame(x = truth, y = estimation)
+  
+  # print(
+  #   ggplot(temp, aes(x, y)) + 
+  #     geom_point() +
+  #     geom_abline(slope = 1, intercept = 0, lty=2) + 
+  #     geom_smooth(method = lm, se = F, color = "red") + 
+  #     ggtitle(te))
+
+  
+  rel_diff <- ((truth - estimation) / truth)^2
+  rel_diff[is.infinite(rel_diff)] <- 0
+  
+  rrmse <- sqrt(mean(rel_diff))
+  
+  RMSE = sqrt(sum((truth-estimation)^2)/length(truth))
+  nrrmse = (RMSE/(max(truth)-min(truth)))*100
+  
+  rel_diff <- abs((truth - estimation) / truth)
+  rel_diff[is.infinite(rel_diff)] <- 0
+  rrmse2 <- mean(rel_diff)      
+  
+  sumdiff <- sumdiff + rrmse
+  
+  sumdiff2 <- sumdiff2 + rrmse2      
+  
+  fit <- lm(truth ~ estimation)
+  sumr2 <- sumr2 + summary(fit)$r.squared
+  
+  
+  rf_accuracy <- rbind(rf_accuracy, data.frame(variable = te,
+                                               value=summary(fit)$r.squared, 
+                                               type = "R-SQUARED [-]",
+                                               rep = i))
+  rf_accuracy <- rbind(rf_accuracy, data.frame(variable = te,
+                                               value=nrrmse, 
+                                               type = "NORMALIZED MEAN RELATIVE ERROR [-]",
+                                               rep = i))
+  rf_accuracy <- rbind(rf_accuracy, data.frame(variable = te,
+                                               value=RMSE, 
+                                               type = "ROOT MEAN SQUARE ERROR[-]",
+                                               rep = i))
+  
+  }
+}
+# print(rf_accuracy)
+
+```
+
+```{r}
+
+rf_accuracy%>%
+  filter(type == "NORMALIZED MEAN RELATIVE ERROR [-]")%>%
+  ggplot()+
+  geom_boxplot(aes(variable, value))+
+  geom_point(aes(variable, value, colour = rep))+
+  viridis::scale_colour_viridis()+
+  theme_dark()
+
+rf_accuracy%>%
+  filter(type == "ROOT MEAN SQUARE ERROR[-]")%>%
+  ggplot()+
+  geom_boxplot(aes(variable, value))+
+  geom_point(aes(variable, value, colour = rep))+
+  viridis::scale_colour_viridis()
+
+```
+
+```{r}
+library(caret)
+
+validation_index <- createDataPartition(data_GM$kr_1, p=0.80, list=FALSE)
+# select 20% of the data for validation
+validation <- data_GM[-validation_index,]
+# use the remaining 80% of data to training and testing the models
+dataset <- data_GM[validation_index,]
+
+# list types for each attribute
+sapply(dataset, class)
+
+# Run algorithms using 10-fold cross validation
+control <- trainControl(method="cv", number=10)
+metric <- "RMSE"
+
+global <- dataset%>%
+  mutate(id = sampl_id)
+# write.csv(global, "data_for_mechanarIA.csv")
+
+summary(global)
+# global <- read.csv("data_for_mechanarIA.csv")
+descriptor <- global%>%select(-kr_1,-kr_2,-kr_3,-sampl_id)
+ground_truth_kr_1 <- global%>%select(kr_1, id)
+
+train <- left_join(ground_truth_kr_1, descriptor, by="id")%>%
+    select(-id)
+
+# a) linear algorithms
+# does not work
+ # fit.lda <- train(kr_1~., data=train, method="lda", metric=metric, trControl=control)
+# b) nonlinear algorithms
+# CART
+
+fit.cart <- train(kr_1~., data=train, method="rpart", metric=metric, trControl=control)
+# kNN
+
+fit.knn <- train(kr_1~., data=train, method="knn", metric=metric, trControl=control)
+# c) advanced algorithms
+# SVM
+
+fit.svm <- train(kr_1~., data=train, method="svmRadial", metric=metric, trControl=control)
+# Random Forest
+
+fit.rf <- train(kr_1~., data=train, method="rf", metric=metric, trControl=control)
+
+
+results <- resamples(list(cart=fit.cart, knn=fit.knn, svm=fit.svm, rf=fit.rf))
+summary(results)
+dotplot(results)
+
+# summarize Best Model
+print(fit.svm)
+print(fit.rf)
+
+predictions <- predict(fit.svm, validation)
+validation$val = predictions
+
+validation%>%
+  ggplot(aes(kr_1, val))+
+  geom_point()+
+  geom_abline(slope = 1)
+
+RMSE = sqrt(sum((validation$kr_1-validation$val)^2)/length(validation$kr_1))
+nrrmse = (RMSE/(max(validation$kr_1)-min(validation$kr_1)))*100
+
+predictions <- predict(fit.rf, validation)
+validation$val = predictions
+
+validation%>%
+  ggplot(aes(kr_1, val))+
+  geom_point()+
+  geom_abline(slope = 1)
+
+RMSE = sqrt(sum((validation$kr_1-validation$val)^2)/length(validation$kr_1))
+nrrmse = (RMSE/(max(validation$kr_1)-min(validation$kr_1)))*100
+
+save(fit.svm, file = "Anat_proc/svm_model_kr1.RData")
+
+```
+
+
+```{r}
+library(caret)
+# Run algorithms using 10-fold cross validation
+control <- trainControl(method="cv", number=10)
+metric <- "RMSE"
+to_est <- c("kr_1", "kr_2", "kr_3")
+descr = c("radius", "var_stele", "var_xylem", "aerenchyma", "kw", "km", "kAQP", "kpl", "thickness")
+
+data_GM = All_data
+
+ACCU <- NULL
+memo = c(10,10,10)
+op <- options(digits.secs = 6)
+for(i in 1:10){
+for(est in to_est){
+  pos <- which(colnames(data_GM) == est)
+  seed <- round(parse_number(unlist(str_split(as.character(Sys.time()), ":"))[3])*10000)
+  set.seed(seed)
+  
+  y <- c(t(data_GM[,pos]))
+  validation_index <- createDataPartition(y, p=0.80, list=FALSE)
+  # select 20% of the data for validation
+  validation <- data_GM[-validation_index,]
+  # use the remaining 80% of data to training and testing the models
+  dataset <- data_GM[validation_index,]
+
+  global <- dataset%>%
+    mutate(id = 1:nrow(dataset))
+  
+  descriptor <- global%>%select(descr, "id")#-kr_1,-kr_2,-kr_3,-sampl_id)
+  ground_truth <- global%>%select(c(est, "id"))
+  colnames(ground_truth)<- c("kr", "id")
+  train <- left_join(ground_truth, descriptor, by="id")%>%
+    select(-id)
+  
+  # cart
+  fit.cart <- train(kr~., data=train, method="rpart", metric=metric, trControl=control)
+  # KNN
+  fit.knn <- train(kr~., data=train, method="knn", metric=metric, trControl=control)
+  # Advanced algorithms
+  fit.svm <- train(kr~., data=train, method="svmRadial", metric=metric, trControl=control)
+  # Random Forest
+  fit.rf <- train(kr~., data=train, method="rf", metric=metric, trControl=control)
+
+  results <- resamples(list(cart=fit.cart, knn=fit.knn, svm=fit.svm, rf=fit.rf))
+  summary(results)
+  print(dotplot(results))
+
+  predictions <- predict(fit.svm, validation)
+  accuracy = tibble(x = validation[,pos], y = predictions)
+
+  accuracy%>%
+    ggplot()+
+    geom_point(aes(unlist(x),y))+
+    geom_abline(slope = 1)
+
+  RMSE = sqrt(sum((accuracy$x-accuracy$y)^2)/nrow(accuracy))
+  nrrmse = (RMSE/(max(accuracy$x)-min(accuracy$x)))*100
+  
+  fit <- lm(unlist(accuracy$x) ~ accuracy$y)
+
+  tmp_svm <- tibble(kr = est, model_type = "svm", rmse = RMSE, nrrmse = nrrmse, rsquare = summary(fit)$r.squared, seed = seed)
+  
+  predictions <- predict(fit.rf, validation)
+  accuracy = tibble(x = validation[,pos], y = predictions)
+  accuracy%>%
+    ggplot()+
+    geom_point(aes(unlist(x),y))+
+    geom_abline(slope = 1)
+  
+  t <- t.test(accuracy$x, accuracy$y, alternative = "two.sided" )
+
+  RMSE = sqrt(sum((accuracy$x-accuracy$y)^2)/nrow(accuracy))
+  nrrmse = (RMSE/(max(accuracy$x)-min(accuracy$x)))*100
+  
+  fit <- lm(unlist(accuracy$x) ~ accuracy$y)
+  tmp_rf <- tibble(kr = est, model_type = "rf", rmse = RMSE, nrrmse = nrrmse, rsquare = summary(fit)$r.squared, seed = seed)
+
+  ACCU = rbind(ACCU, tmp_svm, tmp_rf)
+  
+  if(est == "kr_1"){
+    if(tmp_svm$nrrmse < memo[1]){
+      save(fit.svm, file = "Anat_proc/svm_model_kr1.RData")
+      model_kr1 = fit.svm
+      memo[1] <- tmp_svm$nrrmse 
+    }
+    if(tmp_rf$nrrmse < memo[1]){
+      save(fit.rf, file = "Anat_proc/rf_model_kr1.RData")
+      model_kr1 = fit.rf
+      memo[1] <- tmp_rf$nrrmse 
+    }
+
+  }
+  if(est == "kr_2"){
+    if(tmp_svm$nrrmse < memo[2]){
+      save(fit.svm, file = "Anat_proc/svm_model_kr2.RData")
+      model_kr2 = fit.svm
+      memo[2] <- tmp_svm$nrrmse 
+    }
+    if(tmp_rf$nrrmse < memo[2]){
+      save(fit.rf, file = "Anat_proc/rf_model_kr2.RData")
+      model_kr2 = fit.rf
+      memo[2] <- tmp_rf$nrrmse 
+    }
+  }
+  if(est == "kr_3"){
+    if(tmp_svm$nrrmse < memo[3]){
+      save(fit.svm, file = "Anat_proc/svm_model_kr3.RData")
+      model_kr3 = fit.svm
+      memo[3] <- tmp_svm$nrrmse 
+    }
+    if(tmp_rf$nrrmse < memo[3]){
+      save(fit.rf, file = "Anat_proc/rf_model_kr3.RData")
+      model_kr3 = fit.rf
+      memo[3] <- tmp_rf$nrrmse 
+    }
+  }
+
+}
+}
+#save(fit.rf, file = "Anat_proc/rf_model_kr3.RData")
+
+```
+
+```{r}
+
+ACCU %>%
+  #filter(model_type == "rf")%>%
+  ggplot(aes(kr, nrrmse, colour = model_type))+
+  geom_boxplot()+
+  geom_point()
+
+ACCU %>%
+  #filter(model_type == "rf")%>%
+  ggplot(aes(kr, rsquare, colour = model_type))+
+  geom_boxplot()+
+  geom_point()
+
+ACCU%>%
+  dplyr::group_by(kr, model_type)%>%
+  dplyr::summarise(n = n(),
+            err = mean(nrrmse),
+            rs = mean(rsquare),
+            minerr = min(nrrmse),
+            max_rs = max(rsquare))
+
+write.csv(ACCU, "./Anat_proc/accuracyIA.csv")
+```
+
+
+```{r}
+library(caret)
+
+  load("~/Thesis/2020-10 HydraulicViper/Anat_proc/svm_model_kr1.RData")
+  model_kr1 <- fit.svm
+
+
+  load("~/Thesis/2020-10 HydraulicViper/Anat_proc/svm_model_kr2.RData")
+  model_kr2 <- fit.svm
+
+
+  load("~/Thesis/2020-10 HydraulicViper/Anat_proc/svm_model_kr3.RData")
+  model_kr3 <- fit.svm
+
+
+predictions1 <- predict(model_kr1, validation)
+accuracy1 = tibble(x = validation[,pos], y = predictions1)
+t.test(accuracy1$x,accuracy1$y)
+
+predictions2 <- predict(model_kr2, validation)
+accuracy2 = tibble(x = validation[,pos], y = predictions2)
+t.test(accuracy2$x,accuracy2$y)
+
+predictions2 <- predict(model_kr3, validation)
+accuracy2 = tibble(x = validation[,pos], y = predictions2)
+t.test(accuracy2$x,accuracy2$y)
+
+```
+
+```{r}
+
+AA <- tibble(radius = rep(0.5,40),
+              var_stele = 0,
+              var_xylem = 0,
+              aerenchyma = seq(0,0.4, 0.4/39))
+AA1 <- def_cellhydroprop(AA)
+AA <- alometry(rbind(AA1), RXA_TSA_coef, MXN_TSA_coef, XVA_TSA_coef, CF_CW_coef)
+anat_def <- tibble(radius = rep(0.5,40),
+              var_stele = 0,
+              var_xylem = 0,
+              aerenchyma = 0)
+anat_def1 <- def_cellhydroprop(anat_def)
+anat_def <- alometry(rbind(anat_def1), RXA_TSA_coef, MXN_TSA_coef, XVA_TSA_coef, CF_CW_coef)
+
+AA <- AA%>%
+  mutate(AA = aerenchyma*TCA,
+         stele_r = (r_stele+OneC/2.2),
+         cortex_w = radius - stele_r,
+         pA = aerenchyma,
+         id = 1:40)
+
+# RF
+tmp <- predict(model_kr3, AA)
+AA$kr3 <- tmp
+
+AA%>%
+  ggplot(aes(pA, kr3))+
+  geom_point()
+```
+
+```{r}
+
+tmpkw <- anat_def%>%mutate(kw = c(seq(0.3*3E-5, 6E-5, (6E-5-(0.3*3E-5))/39), seq(0.3*2.4E-4, 4.8E-4, (4.8E-4-(0.3*2.4E-4))/39)))
+tmpkw <- tmpkw%>%
+  mutate(AA = aerenchyma*TCA,
+         stele_r = (r_stele+OneC/2.2),
+         cortex_w = radius - stele_r,
+         pA = aerenchyma,
+         id = 1:80)%>%
+  select(colnames(descriptor))
+
+
+tmp <- PredictRFs(model, tmpkw)
+diffkw <- cbind(tmp,tmpkw)
+
+
+```
+
+```{r}
+
+tmpkAQP <- anat_def%>%mutate(kAQP = rep(seq(0.3*4.3E-4, 8.6E-4, (8.6E-4-(0.3*4.3E-4))/39),2))
+tmpkAQP <- tmpkAQP%>%
+  mutate(AA = aerenchyma*TCA,
+         stele_r = (r_stele+OneC/2.2),
+         cortex_w = radius - stele_r,
+         pA = aerenchyma,
+         id = 1:80)%>%
+  select(colnames(descriptor))
+
+
+tmp <- PredictRFs(model, tmpkAQP)
+diffkAQP <- cbind(tmp,tmpkAQP)
+
+```
+
+```{r}
+
+ggplot()+
+  geom_point(aes(AA/TCA, kr_1),alpha = 0.5, size = 2, data = diffAA)+
+  geom_point(aes(AA/TCA, kr_1), data = data_GM%>%filter(sampl_id %in% c(c(1001:1020)+2320, c(1001:1020))))+
+  geom_smooth(aes(AA/TCA, kr_1, group = factor(kw)), data = data_GM%>%filter(sampl_id %in% c(c(1001:1020)+2320, c(1001:1020))))
+
+ggplot()+
+  geom_point(aes(kw, kr_1), data = data_GM%>%filter(sampl_id %in% c(c(1021:1040)+2320, c(1041:1060))))+
+  geom_smooth(aes(kw, kr_1, group = factor(km)), data = data_GM%>%  filter(sampl_id %in% c(c(1021:1040)+2320, c(1041:1060))))+
+  geom_point(aes(kw, kr_1, colour = km),alpha = 0.5,size = 3, data = diffkw)
+
+ggplot()+
+  geom_point(aes(kAQP, kr_1), data = data_GM%>% filter(sampl_id %in% c(c(1061:1080)+2320, c(1061:1080))))+
+  geom_smooth(aes(kAQP, kr_1, group = factor(kw)), data = data_GM%>%filter(sampl_id %in% c(c(1061:1080)+2320, c(1061:1080))))+
+  geom_point(aes(kAQP, kr_1, colour = kw),alpha = 0.5,size = 3, data = diffkAQP)
+
+```
+
+
+```{r}
+descr = c("radius", "var_stele", "var_xylem", "aerenchyma", "kw", "km", "kAQP", "kpl", "thickness")
+library(sensitivity)
+n = descr
+MAX = MIN = NULL
+for(co in n){
+  tmp <- data_GM[,co]
+  MIN = c(MIN, min(tmp))
+  MAX = c(MAX, max(tmp))
+}
+
+Morris <- morris(model = NULL, factors = 9, r = 20, design = list(type = "oat", levels = 5, grid.jump = 3),
+                 binf= MIN,  bsup = MAX, scale = T)
+
+design <- as.data.frame(Morris$X)
+colnames(design) <- descr
+
+
+kr1 = predict(model_kr1, design)
+
+tell(Morris, kr1)
+mu.star <- apply(Morris$ee, 2, function(Morris) mean(abs(Morris)))
+sigma <- apply(Morris$ee, 2, sd)
+
+x <- as.numeric(mu.star)
+y <- as.numeric(sigma)
+
+da = tibble(mu = x , sigma = y, name = descr, apo = 1)
+
+# kr2
+kr2 = predict(model_kr2, design)
+
+tell(Morris, kr2)
+mu.star <- apply(Morris$ee, 2, function(Morris) mean(abs(Morris)))
+sigma <- apply(Morris$ee, 2, sd)
+
+x <- as.numeric(mu.star)
+y <- as.numeric(sigma)
+
+db = tibble(mu = x , sigma = y, name = descr, apo = 2)
+
+db %>% ggplot(aes(mu,sigma))+geom_point()+geom_text(aes(label = name), vjust = 0, nudge_y = 0.0000002)
+
+# kr3
+kr3 = predict(model_kr3, design)
+
+tell(Morris, kr3)
+mu.star <- apply(Morris$ee, 2, function(Morris) mean(abs(Morris)))
+sigma <- apply(Morris$ee, 2, sd)
+
+x <- as.numeric(mu.star)
+y <- as.numeric(sigma)
+
+dc = tibble(mu = x , sigma = y, name = descr, apo = 3)
+
+dc %>% ggplot(aes(mu,sigma))+geom_point()+geom_text(aes(label = name), vjust = 0, nudge_y = 0.0000002)
+
+mor = rbind(da, db , dc)
+
+mor %>% ggplot(aes(mu,sigma))+
+  geom_point(aes(colour = name), size = 5, alpha = 0.8)+
+  geom_abline(slope = 1, linetype = 2)+
+  geom_text(aes(label = name), vjust = 0, nudge_y = 0.0000002)+
+  facet_wrap(~apo)+
+  theme_dark()+
+  viridis::scale_colour_viridis(discrete = T)
+
+```
+
+```{r}
+vals <- list(list(var="radius",dist="unif",params=list(min=0.1,max=1.5)),
+             list(var="var_stele",dist="unif",params=list(min=-0.3,max=0.4)),
+             list(var="var_xylem",dist="unif",params=list(min=-0.3,max=0.3)),
+             list(var="aerenchyma",dist="unif",params=list(min=0,max=0.5)),
+             list(var="kw",dist="unif",params=list(min=0.1*2.4E-4,max=10*2.4E-4)),
+             list(var="km",dist="unif",params=list(min=0.1*3E-5,max=10*3E-5)),
+             list(var="kAQP",dist="unif",params=list(min=0.1*4.3E-4,max=10*4.3E-4)),
+             list(var="kpl",dist="unif",params=list(min=0.01*5.3E-12,max=100*5.3E-12)),
+             list(var="thickness",dist="unif",params=list(min=0.8,max=2)))
+n <- 2^12
+detach("package:sensitivity", unload=TRUE)
+Sampl <- makeMCSample(n,vals)
+
+name = colnames(Sampl)[2:10]
+
+X1 <- Sampl%>%
+  select(-n)
+
+makeMCSample2 <- function(n, vals) {
+  # Packages to generate quasi-random sequences
+  # and rearrange the data
+  require(randtoolbox)
+  require(plyr)
+  
+  # Generate a Sobol' sequence
+  sob <- sobol(n, length(vals), seed = 1234, scrambling = 1)
+  
+  # Fill a matrix with the values
+  # inverted from uniform values to
+  # distributions of choice
+  samp <- matrix(rep(0,n*(length(vals)+1)), nrow=n)
+  samp[,1] <- 1:n
+  for (i in 1:length(vals)) {
+    # i=1
+    l <- vals[[i]]
+    dist <- l$dist
+    params <- l$params
+    fname <- paste("q",dist,sep="")
+    samp[,i+1] <- do.call(fname,c(list(p=sob[,i]),params))
+  }
+  
+  # Convert matrix to data frame and add labels
+  samp <- as.data.frame(samp)
+  names(samp) <- c("n",laply(vals, function(l) l$var))
+  return(samp)
+}
+
+X2 <- makeMCSample2(n, vals)%>%
+  select(-n)
+
+X1 -X2
+```
+
+
+```{r}
+# data_GM = All_data
+# Fourier Amplitude Sensitivity Test
+descr = c("radius", "var_stele", "var_xylem", "aerenchyma", "kw", "km", "kAQP", "kpl", "thickness")
+library(sensitivity)
+n = descr
+MAX = MIN = NULL
+for(co in n){
+  tmp <- data_GM[,co]
+  MIN = c(MIN, min(tmp))
+  MAX = c(MAX, max(tmp))
+}
+
+load("./Anat_proc/svm_model_kr1.RData")
+model_kr1 <- fit.svm
+load("./Anat_proc/svm_model_kr2.RData")
+model_kr2 <- fit.svm
+load("./Anat_proc/svm_model_kr3.RData")
+model_kr3 <- fit.svm
+
+FAST <- fast99(model = model_kr1, descr, n = 1024, M = 9, omega = NULL, q = rep("qunif", 9), q.arg = list(list(min = MIN[1], max = MAX[1]),
+                                                                                                list(min = MIN[2], max = MAX[2]),
+                                                                                                list(min = MIN[3], max = MAX[3]),
+                                                                                                list(min = MIN[4], max = MAX[4]),
+                                                                                                list(min = MIN[5], max = MAX[5]),
+                                                                                                list(min = MIN[6], max = MAX[6]),
+                                                                                                list(min = MIN[7], max = MAX[7]),
+                                                                                                list(min = MIN[8], max = 5E-11),
+                                                                                                list(min = MIN[9], max = MAX[9])
+                                                                                                ))
+tell(FAST, y = NULL)
+
+print(FAST)
+plot(FAST)
+x = FAST
+S <- cbind(c(x$D1 / x$V,  1 - x$Dt / x$V - x$D1 / x$V),rep(n,2))
+colnames(S) = c("effect", "name")
+S <- S %>% as_data_frame()%>%
+  mutate(main = c(rep("main",9),rep("inter",9) ),
+         apo = 1)
+
+FAST <- fast99(model = model_kr2, descr, n = 1024, M = 9, omega = NULL, q = rep("qunif", 9), q.arg = list(list(min = MIN[1], max = MAX[1]),
+                                                                                                list(min = MIN[2], max = MAX[2]),
+                                                                                                list(min = MIN[3], max = MAX[3]),
+                                                                                                list(min = MIN[4], max = MAX[4]),
+                                                                                                list(min = MIN[5], max = MAX[5]),
+                                                                                                list(min = MIN[6], max = MAX[6]),
+                                                                                                list(min = MIN[7], max = MAX[7]),
+                                                                                                list(min = MIN[8], max = 5E-11),
+                                                                                                list(min = MIN[9], max = MAX[9])
+                                                                                                ))
+tell(FAST, y = NULL)
+
+print(FAST)
+plot(FAST)
+x = FAST
+S2 <- cbind(c(x$D1 / x$V,  1 - x$Dt / x$V - x$D1 / x$V),rep(n,2))
+colnames(S2) = c("effect", "name")
+S2 <- S2 %>% as_data_frame()%>%
+  mutate(main = c(rep("main",9),rep("inter",9) ),
+         apo = 2)
+
+FAST <- fast99(model = model_kr3, descr, n = 1024, M = 9, omega = NULL, q = rep("qunif", 9), q.arg = list(list(min = MIN[1], max = MAX[1]),
+                                                                                                list(min = MIN[2], max = MAX[2]),
+                                                                                                list(min = MIN[3], max = MAX[3]),
+                                                                                                list(min = MIN[4], max = MAX[4]),
+                                                                                                list(min = MIN[5], max = MAX[5]),
+                                                                                                list(min = MIN[6], max = MAX[6]),
+                                                                                                list(min = MIN[7], max = MAX[7]),
+                                                                                                list(min = MIN[8], max = 5E-11),
+                                                                                                list(min = MIN[9], max = MAX[9])
+                                                                                                ))
+tell(FAST, y = NULL)
+
+print(FAST)
+plot(FAST)
+x = FAST
+S3 <- cbind(c(x$D1 / x$V,  1 - x$Dt / x$V - x$D1 / x$V),rep(n,2))
+colnames(S3) = c("effect", "name")
+S3 <- S3 %>% as_data_frame()%>%
+  mutate(main = c(rep("main",9),rep("inter",9) ),
+         apo = 3)
+
+S0 = rbind(S, S2, S3)
+
+S0%>%
+  as_data_frame()%>%
+  ggplot(aes(name, y = as.numeric(effect), fill = main, group = apo))+
+  geom_bar(stat = "identity", position = "stack" )+
+  ylim(0,1)+
+  ylab("% var explained")+
+  xlab("input")+
+  coord_flip()+
+  theme_classic()+
+  facet_wrap(~apo)
+
+
+x <- sobol2007(model = NULL, X1, X2, nboot = 500)
+y = predict(model_kr1, x$X)
+tell(x,y)
+
+# ggplot(x)
+vardec1 <- tibble(name = descr,
+                 main = x$S$original,
+                 mainlow = x$S$`min. c.i.`,
+                 mainhigh = x$S$`max. c.i.`,
+                 tot = x$T$original,
+                 totlow = x$T$`min. c.i.`,
+                 tothigh = x$T$`max. c.i.`,
+                 type = "kr1")
+
+
+
+y = predict(model_kr2, x$X)
+tell(x,y)
+vardec2 <- tibble(name = descr,
+                 main = x$S$original,
+                 mainlow = x$S$`min. c.i.`,
+                 mainhigh = x$S$`max. c.i.`,
+                 tot = x$T$original,
+                 totlow = x$T$`min. c.i.`,
+                 tothigh = x$T$`max. c.i.`,
+                 type = "kr2")
+
+y = predict(model_kr3, x$X)
+tell(x,y)
+vardec3 <- tibble(name = descr,
+                 main = x$S$original,
+                 mainlow = x$S$`min. c.i.`,
+                 mainhigh = x$S$`max. c.i.`,
+                 tot = x$T$original,
+                 totlow = x$T$`min. c.i.`,
+                 tothigh = x$T$`max. c.i.`,
+                 type = "kr3")
+
+vardec = rbind(vardec1, vardec2, vardec3)
+
+vardec %>%
+  ggplot()+
+  geom_bar(aes(name, tot),
+           stat = "identity", position = "stack", fill = "#FF9999")+
+  geom_bar(aes(name, main),stat = "identity", position = "stack", fill = "#00CCCC" )+
+  coord_flip()+
+  theme_classic()+
+  facet_wrap(~type)
+
+comp <- rbind(tibble(name = rep(vardec$name,2),
+                     effect = c(vardec$main, vardec$tot-vardec$main),
+                     main = c(rep("main", 9*3),rep("inter", 9*3)),
+                     apo = rep(c(rep(1, 9), rep(2,9), rep(3,9)),2),
+                     type = "Sobol"),
+              S0%>%mutate(type = "FAST"))
+
+comp%>%
+  as_data_frame()%>%
+  ggplot(aes(name, y = as.numeric(effect), fill = main, group = apo))+
+  geom_bar(stat = "identity", position = "stack" )+
+  ylim(0,1)+
+  ylab("% var explained")+
+  xlab("input")+
+  coord_flip()+
+  theme_classic()+
+  facet_grid(type~apo)
+
+library(GGally)
+
+```
+
+```{r}
+
+All_data%>%
+  ggplot()+
+  geom_density(aes(kr_1), colour = "blue")+
+  geom_density(aes(kr_2), colour = "red")+
+  geom_density(aes(kr_3), colour = "green")
+
+```
+
+```{r}
+
+
+ks.control <- function(data = data_GM, yname = "kr_1", xname = "kpl"){
+  y = data[, yname]
+  x = data[, xname]
+  data <- tibble(x,y)
+  if(xname == "kpl"){
+    quantY <- quantile(t(y), probs = seq(0.75,1, 0.05))
+    data <- data %>%
+      mutate(clust = ifelse(y < quantY[1], "1", 
+                        ifelse(y < quantY[2], "2", 
+                           ifelse(y < quantY[3], "3", 
+                              ifelse(y < quantY[4],"4", 
+                                 ifelse(y < quantY[5], "5", "6"))))))
+    data %>%
+      ggplot()+geom_density(aes(unlist(x), fill = clust), alpha = 0.5)+
+      theme_classic()+
+      viridis::scale_fill_viridis(discrete = T, labels = c("<75", "75-80", "80-85", "85-90", "90-95", "95-100"), name = xname)+labs(title = yname)
+  }else{
+    quantY <- quantile(t(y))
+    data <- data %>%
+      mutate(clust = ifelse(y < quantY[2], "1", ifelse(y < quantY[3], "2", ifelse(y < quantY[4], "3", "4"))))
+    data %>%
+      ggplot()+geom_density(aes(unlist(x), fill = clust), alpha = 0.5)+
+      theme_classic()+
+      viridis::scale_fill_viridis(discrete = T, labels = c("< 25%", "25-50%", "50-75%", "> 75%"), name = xname)+labs(title = yname)
+  }
+}
+
+for(i in n){
+  print(ks.control(data = All_data, yname = "kr_1", xname = i))
+}
+for(i in n){
+  print(ks.control(data = All_data, yname = "kr_2", xname = i))
+}
+for(i in n){
+  print(ks.control(data = All_data, yname = "kr_3", xname = i))
+}
+
+
+```
+
+```{r}
+# x1 <- All_data$radius[All_data$kr_2 > quantile(All_data$kr_2)[3] &  All_data$kr_2 <= quantile(All_data$kr_2)[4]]
+# x2 <- All_data$radius[All_data$kr_2 <= quantile(All_data$kr_2)[3] |  All_data$kr_2 > quantile(All_data$kr_2)[4]]
+# 
+# plot(ecdf(x1), xlim = range(c(x1,x2)), col = "blue")
+# plot(ecdf(x2), add = T, col = "red")
+
+x1 <- All_data$kAQP[All_data$kr_1 > quantile(All_data$kr_1)[2]]
+x2 <- All_data$kAQP[All_data$kr_1 <= quantile(All_data$kr_1)[2]]
+
+group <- c(rep(">25%", length(x1)), rep("<25%", length(x2)))
+dat <- data.frame(KSD = c(x1,x2), group = group)
+cdf1 <- ecdf(x1) 
+cdf2 <- ecdf(x2) 
+
+minMax <- seq(min(x1, x2), max(x1, x2), length.out=length(x1)) 
+x0 <- minMax[which( abs(cdf1(minMax) - cdf2(minMax)) == max(abs(cdf1(minMax) - cdf2(minMax))) )] 
+y0 <- cdf1(x0) 
+y1 <- cdf2(x0) 
+
+
+ggplot(dat, aes(x = KSD, group = group, colour = group, linetype=group))+
+  stat_ecdf(size=1) +
+  xlab("kAQP") +
+  ylab("Cumulitive Distibution") +
+  geom_segment(aes(x = x0[1], y = y0[1], xend = x0[1], yend = y1[1]),
+               linetype = "dashed", color = "red") +
+  geom_point(aes(x = x0[1] , y= y0[1]), color="red", size=1) +
+  geom_point(aes(x = x0[1] , y= y1[1]), color="red", size=1) +
+  ggtitle("K-S Test: >25% / <25%")
+
+
+
+x1 <- All_data$kw[All_data$kr_1 > quantile(All_data$kr_1)[2]]
+x2 <- All_data$kw[All_data$kr_1 <= quantile(All_data$kr_1)[2]]
+
+group <- c(rep(">25%", length(x1)), rep("<25%", length(x2)))
+dat <- data.frame(KSD = c(x1,x2), group = group)
+cdf1 <- ecdf(x1) 
+cdf2 <- ecdf(x2) 
+
+minMax <- seq(min(x1, x2), max(x1, x2), length.out=length(x1)) 
+x0 <- minMax[which( abs(cdf1(minMax) - cdf2(minMax)) == max(abs(cdf1(minMax) - cdf2(minMax))) )] 
+y0 <- cdf1(x0) 
+y1 <- cdf2(x0) 
+
+
+ggplot(dat, aes(x = KSD, group = group, colour = group, linetype=group))+
+  stat_ecdf(size=1) +
+  xlab("kw") +
+  ylab("Cumulitive Distibution") +
+  geom_segment(aes(x = x0[1], y = y0[1], xend = x0[1], yend = y1[1]),
+               linetype = "dashed", color = "red") +
+  geom_point(aes(x = x0[1] , y= y0[1]), color="red", size=1) +
+  geom_point(aes(x = x0[1] , y= y1[1]), color="red", size=1) +
+  ggtitle("K-S Test: >25% / <25%")
+
+
+x1 <- All_data$var_stele[All_data$kr_1 > quantile(All_data$kr_1)[4]]
+x2 <- All_data$var_stele[All_data$kr_1 <= quantile(All_data$kr_1)[4]]
+
+group <- c(rep(">75%", length(x1)), rep("<75%", length(x2)))
+dat <- data.frame(KSD = c(x1,x2), group = group)
+cdf1 <- ecdf(x1) 
+cdf2 <- ecdf(x2) 
+
+minMax <- seq(min(x1, x2), max(x1, x2), length.out=length(x1)) 
+x0 <- minMax[which( abs(cdf1(minMax) - cdf2(minMax)) == max(abs(cdf1(minMax) - cdf2(minMax))) )] 
+y0 <- cdf1(x0) 
+y1 <- cdf2(x0) 
+
+
+ggplot(dat, aes(x = KSD, group = group, colour = group, linetype=group))+
+  stat_ecdf(size=1) +
+  xlab("var_stele") +
+  ylab("Cumulitive Distibution") +
+  geom_segment(aes(x = x0[1], y = y0[1], xend = x0[1], yend = y1[1]),
+               linetype = "dashed", color = "red") +
+  geom_point(aes(x = x0[1] , y= y0[1]), color="red", size=1) +
+  geom_point(aes(x = x0[1] , y= y1[1]), color="red", size=1) +
+  ggtitle("K-S Test: >75% / <75%")
+
+
+x1 <- All_data$aerenchyma[All_data$kr_1 > quantile(All_data$kr_1)[2]]
+x2 <- All_data$aerenchyma[All_data$kr_1 <= quantile(All_data$kr_1)[2]]
+
+group <- c(rep(">25%", length(x1)), rep("<25%", length(x2)))
+dat <- data.frame(KSD = c(x1,x2), group = group)
+cdf1 <- ecdf(x1) 
+cdf2 <- ecdf(x2) 
+
+minMax <- seq(min(x1, x2), max(x1, x2), length.out=length(x1)) 
+x0 <- minMax[which( abs(cdf1(minMax) - cdf2(minMax)) == max(abs(cdf1(minMax) - cdf2(minMax))) )] 
+y0 <- cdf1(x0) 
+y1 <- cdf2(x0) 
+
+
+ggplot(dat, aes(x = KSD, group = group, colour = group, linetype=group))+
+  stat_ecdf(size=1) +
+  xlab("aerenchyma") +
+  ylab("Cumulitive Distibution") +
+  geom_segment(aes(x = x0[1], y = y0[1], xend = x0[1], yend = y1[1]),
+               linetype = "dashed", color = "red") +
+  geom_point(aes(x = x0[1] , y= y0[1]), color="red", size=1) +
+  geom_point(aes(x = x0[1] , y= y1[1]), color="red", size=1) +
+  ggtitle("K-S Test: >25% / <25%")
+
+x1 <- All_data$thickness[All_data$kr_1 > quantile(All_data$kr_1)[4]]
+x2 <- All_data$thickness[All_data$kr_1 <= quantile(All_data$kr_1)[4]]
+
+group <- c(rep(">75%", length(x1)), rep("<75%", length(x2)))
+dat <- data.frame(KSD = c(x1,x2), group = group)
+cdf1 <- ecdf(x1) 
+cdf2 <- ecdf(x2) 
+
+minMax <- seq(min(x1, x2), max(x1, x2), length.out=length(x1)) 
+x0 <- minMax[which( abs(cdf1(minMax) - cdf2(minMax)) == max(abs(cdf1(minMax) - cdf2(minMax))) )] 
+y0 <- cdf1(x0) 
+y1 <- cdf2(x0) 
+
+
+ggplot(dat, aes(x = KSD, group = group, colour = group, linetype=group))+
+  stat_ecdf(size=1) +
+  xlab("thickness") +
+  ylab("Cumulitive Distibution") +
+  geom_segment(aes(x = x0[1], y = y0[1], xend = x0[1], yend = y1[1]),
+               linetype = "dashed", color = "red") +
+  geom_point(aes(x = x0[1] , y= y0[1]), color="red", size=1) +
+  geom_point(aes(x = x0[1] , y= y1[1]), color="red", size=1) +
+  ggtitle("K-S Test: >75% / <75%")
+
+
+x1 <- All_data$radius[All_data$kr_2 > quantile(All_data$kr_2)[4] | All_data$kr_2 <= quantile(All_data$kr_2)[3]]
+x2 <- All_data$radius[All_data$kr_2 <= quantile(All_data$kr_2)[4] & All_data$kr_2 > quantile(All_data$kr_2)[3]]
+
+group <- c(rep("0-50% & 75-100", length(x1)), rep("50-75%", length(x2)))
+dat <- data.frame(KSD = c(x1,x2), group = group)
+cdf1 <- ecdf(x1) 
+cdf2 <- ecdf(x2) 
+
+minMax <- seq(min(x1, x2), max(x1, x2), length.out=length(x1)) 
+x0 <- minMax[which( abs(cdf1(minMax) - cdf2(minMax)) == max(abs(cdf1(minMax) - cdf2(minMax))) )] 
+y0 <- cdf1(x0) 
+y1 <- cdf2(x0) 
+
+
+ggplot(dat, aes(x = KSD, group = group, colour = group, linetype=group))+
+  stat_ecdf(size=1) +
+  xlab("radius") +
+  ylab("Cumulitive Distibution") +
+  geom_segment(aes(x = x0[1], y = y0[1], xend = x0[1], yend = y1[1]),
+               linetype = "dashed", color = "red") +
+  geom_point(aes(x = x0[1] , y= y0[1]), color="red", size=1) +
+  geom_point(aes(x = x0[1] , y= y1[1]), color="red", size=1) +
+  ggtitle("K-S Test: >75% / <75%")
+
+
+
+x1 <- All_data$kpl[All_data$kr_1 > quantile(All_data$kr_1)[4]]
+x2 <- All_data$kpl[All_data$kr_1 <= quantile(All_data$kr_1)[4]]
+
+group <- c(rep(">25%", length(x1)), rep("<25%", length(x2)))
+dat <- data.frame(KSD = c(x1,x2), group = group)
+cdf1 <- ecdf(x1) 
+cdf2 <- ecdf(x2) 
+
+minMax <- seq(min(x1, x2), max(x1, x2), length.out=length(x1)) 
+x0 <- minMax[which( abs(cdf1(minMax) - cdf2(minMax)) == max(abs(cdf1(minMax) - cdf2(minMax))) )] 
+y0 <- cdf1(x0) 
+y1 <- cdf2(x0) 
+
+
+ggplot(dat, aes(x = KSD, group = group, colour = group, linetype=group))+
+  stat_ecdf(size=1) +
+  xlab("kpl") +
+  ylab("Cumulitive Distibution") +
+  geom_segment(aes(x = x0[1], y = y0[1], xend = x0[1], yend = y1[1]),
+               linetype = "dashed", color = "red") +
+  geom_point(aes(x = x0[1] , y= y0[1]), color="red", size=1) +
+  geom_point(aes(x = x0[1] , y= y1[1]), color="red", size=1) +
+  ggtitle("K-S Test: >25% / <25%")
+```

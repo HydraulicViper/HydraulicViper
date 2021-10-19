@@ -7,9 +7,8 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-setwd(dir = "~/Thesis/2020-10 HydraulicViper/")
-source("~/Thesis/2020-10 HydraulicViper/Anat_proc/io_anaproc.R")
-params <- read_param_xml("~/Thesis/2020-10 HydraulicViper/GRANAR/www/Zea_mays_CT.xml")
+source("./HydraulicAnatomy/io_anaproc.R")
+params <- read_param_xml("./HydraulicAnatomy/www/Zea_mays_CT.xml")
 ```
 
 ```{r}
