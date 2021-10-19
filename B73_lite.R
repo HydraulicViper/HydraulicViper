@@ -4,32 +4,20 @@ setwd(dir = DIR_path)
 
 JOB_NUMBER <- 1
 # library and io_function
-source("/home/users/a/h/aheymans/GSUA/R/B73_function.R")
-source("/home/users/a/h/aheymans/GSUA/R/getSUF.R")
-source("/home/users/a/h/aheymans/GSUA/R/dependencies.R")
+source(".R/B73_function.R")
+source("./R/getSUF.R")
+source("./R/dependencies.R")
 # source("/home/users/a/h/aheymans/GSUA/R/GRANAR/granar.R")
 
 # Parameter--------------
 # params <- read_param_xml("/home/users/a/h/aheymans/GSUA/www/Zea_mays_CT.xml")
-MatSobol<- read.csv(paste0("/home/users/a/h/aheymans/GSUA/sampling/SamplingB73_Sobol.csv"))
+MatSobol<- read.csv(paste0("./sampling/SamplingB73_Sobol.csv"))
 # missing <- read.csv(paste0("/home/users/a/h/aheymans/GSUA/www/missing.csv"))
 MatSobol$km <- 3E-5 # hydraulic conductivity of the membrane without aquaporins. fixed because it has no effect
-WEATHER <- read.csv("/home/users/a/h/aheymans/GSUA/www/Weather_2loc30days.csv")
+WEATHER <- read.csv("./WeatherData/Weather_2loc30days.csv")
 location <- as.character(unique(WEATHER$local))
 
-MatSobol <- MatSobol%>%filter(X %in% 10:18)%>%
-              mutate(stele = rep(c(1.6),9),#1.6, 1.53, 1.97
-                     radius_sem = rep(c(0.319),9),# 0.319, 0.299,  0.288
-                     radius_shoot = rep(c(0.44),9), # 0.44, 0.445, 0.424
-                     radius_lat = rep(c( 0.133),9),#0.133, 0.131, 0.134
-                     aer = rep(c( 0.245),9), # 0.245, 0.243, 0.241
-                     xylem = rep(c(2.83),9), # 2.83,2.83, 4.43
-                     gap = rep(c( 0.447),9), # 0.447, 0.406, 0.582
-                     trans_time_apo = rep(c( 2.16),9), # 2.16, 2, 2
-                     trans_time_xyl = rep(c(2.52 ),9), # 2.52, 2.51, 2.64
-                     kw = rep(2.93E-4, 9),
-                     aquaporine = rep(c(6.57E-4),9), # 6.57E-4, 6.39E-4, 6.46E-4
-                     plasmo = rep(c(7.07E-12),9)) # 7.07E-12, 7.03E-12, 6.64E-12
+MatSobol <- MatSobol%>%filter(X %in% 1:5) # 5 different phenotyping states
 
 # tpots[tpots < -15000] <- -15000 # hPa # Threshold value under -15000 hPa, the stomata close.
 # Scrpit R ----------------
