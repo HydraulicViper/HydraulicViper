@@ -1,0 +1,107 @@
+X1,cities,country,location,longitude,latitude
+1,Berlin,Germany,"Berlin, Germany",13.3888599,52.5170365
+2,Madrid,Spain,"Madrid, Spain",-3.7034351,40.477853350000004
+3,Rome,Italy,"Rome, Italy",12.5451136,41.8983351
+4,Paris,France,"Paris, France",2.3469411,48.85886575
+5,Bucharest,Romania,"Bucharest, Romania",26.1027202,44.4361414
+6,Vienna,Austria,"Vienna, Austria",16.3725042,48.2083537
+7,Hamburg,Germany,"Hamburg, Germany",10.009913300000001,53.543764100000004
+8,Warsaw,Poland,"Warsaw, Poland",21.061419700000002,52.233001900000005
+9,Budapest,Hungary,"Budapest, Hungary",19.13001575,47.48141835
+10,Barcelona,Spain,"Barcelona, Spain",2.1404266,41.3924744
+11,Munich,Germany,"Munich, Germany",11.54184265,48.1548703
+12,Milan,Italy,"Milan, Italy",9.1594985,45.46129315
+13,Prague,Czech Republic,"Prague, Czech Republic",14.4656111,50.05966535
+14,Sofia,Bulgaria,"Sofia, Bulgaria",23.31052095,42.7034327
+15,Brussels,Belgium,"Brussels, Belgium",4.3687982000000005,50.84345245
+16,Cologne,Germany,"Cologne, Germany",6.9672791499999995,50.9577071
+17,Stockholm,Sweden,"Stockholm, Sweden",18.0710935,59.325117199999994
+18,Naples,Italy,"Naples, Italy",14.242906,40.853657999999996
+19,Turin,Italy,"Turin, Italy",7.6755868,45.07350495
+20,Amsterdam,Netherlands,"Amsterdam, Netherlands",4.90395925,52.354619
+21,Marseille,France,"Marseille, France",5.3805534999999995,43.28032785
+22,Zagreb,Croatia,"Zagreb, Croatia",15.9625779,45.842667
+23,Valencia,Spain,"Valencia, Spain",-0.35253585,39.4225349
+24,Kraków,Poland,"Kraków, Poland",19.56,50.03
+25,Frankfurt,Germany,"Frankfurt, Germany",8.6820917,50.1106444
+26,Seville,Spain,"Seville, Spain",-5.9260377,37.37658075
+27,Lódz,Poland,"Lódz, Poland",19.27,51.46
+28,Zaragoza,Spain,"Zaragoza, Spain",-0.9270592,41.6915749
+29,Athens,Greece,"Athens, Greece",23.7283052,37.983941200000004
+30,Palermo,Italy,"Palermo, Italy",13.347152300000001,38.13725015
+31,Helsinki,Finland,"Helsinki, Finland",25.0186571,60.110167849999996
+32,Rotterdam,Netherlands,"Rotterdam, Netherlands",4.4905589,51.9279744
+33,Wroclaw,Poland,"Wroclaw, Poland",16.99177925,51.1263645
+34,Stuttgart,Germany,"Stuttgart, Germany",9.1800132,48.778448499999996
+35,Riga,Latvia,"Riga, Latvia",24.12860705,56.97166385
+36,Copenhagen,Denmark,"Copenhagen, Denmark",12.5700724,55.686724299999995
+37,Düsseldorf,Germany,"Düsseldorf, Germany",6.47,51.14
+38,Leipzig,Germany,"Leipzig, Germany",12.3747329,51.34063209999999
+39,Dortmund,Germany,"Dortmund, Germany",7.4652788999999995,51.5142273
+40,Essen,Germany,"Essen, Germany",7.0159971,51.440886649999996
+41,Gothenburg,Sweden,"Gothenburg, Sweden",11.99338865,57.64391775
+42,Genoa,Italy,"Genoa, Italy",8.880662449999999,44.44915640000001
+43,Málaga,Spain,"Málaga, Spain",4.25,36.43
+44,Bremen,Germany,"Bremen, Germany",8.73616235,53.3047277
+45,Vilnius,Lithuania,"Vilnius, Lithuania",25.25305795,54.7008287
+46,Dublin,Ireland,"Dublin, Ireland",-6.2509543999999995,53.3546379
+47,Dresden,Germany,"Dresden, Germany",13.7381437,51.049328599999996
+48,The Hague,Netherlands,"The Hague, Netherlands",4.30374405,52.074942300000004
+49,Hanover,Germany,"Hanover, Germany",9.761427950000002,52.3797361
+50,Poznan,Poland,"Poznan, Poland",16.901647150000002,52.400626
+51,Antwerp,Belgium,"Antwerp, Belgium",4.35777265,51.260464
+52,Nuremberg,Germany,"Nuremberg, Germany",11.13566415,49.436093650000004
+53,Lyon,France,"Lyon, France",4.8350954,45.7578147
+54,Lisbon,Portugal,"Lisbon, Portugal",-9.1580842,38.744078900000005
+55,Duisburg,Germany,"Duisburg, Germany",6.759562,51.434999000000005
+56,Toulouse,France,"Toulouse, France",1.43288755,43.600681
+57,Gdansk,Poland,"Gdansk, Poland",18.6913884,54.3610691
+58,Murcia,Spain,"Murcia, Spain",-1.1178617,37.9168952
+59,Tallinn,Estonia,"Tallinn, Estonia",24.7453688,59.437215499999994
+60,Bratislava,Slovakia,"Bratislava, Slovakia",17.1029616,48.13621585
+61,Palma de Mallorca,Spain,"Palma de Mallorca, Spain",2.7718533,39.38957055
+62,Szczecin,Poland,"Szczecin, Poland",14.62462065,53.42969955
+63,Bologna,Italy,"Bologna, Italy",11.33162505,44.4885635
+64,Brno,Czech Republic,"Brno, Czech Republic",16.5779122,49.2021252
+65,Ia<U+0219>i,Romania,"Ia<U+0219>i, Romania",27.35,47.09
+66,Florence,Italy,"Florence, Italy",11.244332100000001,43.78066735
+67,Las Palmas,Spain,"Las Palmas, Spain",-15.45939335,28.1028686
+68,Bochum,Germany,"Bochum, Germany",7.22572045,51.4709397
+69,Wuppertal,Germany,"Wuppertal, Germany",7.1780374,51.264018
+70,Utrecht,Netherlands,"Utrecht, Netherlands",5.099668599999999,52.080976750000005
+71,Bydgoszcz,Poland,"Bydgoszcz, Poland",18.03793975,53.12972675
+72,Aarhus,Denmark,"Aarhus, Denmark",10.2134046,56.149627800000005
+73,Plovdiv,Bulgaria,"Plovdiv, Bulgaria",24.7499297,42.1418541
+74,Bilbao,Spain,"Bilbao, Spain",-2.93312235,43.25192455
+75,Malmö,Sweden,"Malmö, Sweden",13.02,55.36
+76,Nice,France,"Nice, France",7.252932749999999,43.7030912
+77,Lublin,Poland,"Lublin, Poland",22.5636653,51.218184050000005
+78,Varna,Bulgaria,"Varna, Bulgaria",27.9150855,43.2069025
+79,Bielefeld,Germany,"Bielefeld, Germany",8.5205825,52.0148219
+80,Alicante,Spain,"Alicante, Spain",-0.5158909,38.3487273
+81,Timi<U+0219>oara,Romania,"Timi<U+0219>oara, Romania",21.13,45.45
+82,Bonn,Germany,"Bonn, Germany",7.1006599999999995,50.735851
+83,Córdoba,Spain,"Córdoba, Spain",4.46,37.53
+84,Thessaloniki,Greece,"Thessaloniki, Greece",22.9352716,40.6403167
+85,Cluj-Napoca,Romania,"Cluj-Napoca, Romania",23.60878485,46.77590155
+86,Bari,Italy,"Bari, Italy",16.87532425,41.09292105
+87,Constan<U+021B>a,Romania,"Constan<U+021B>a, Romania",28.38,44.10
+88,Münster,Germany,"Münster, Germany",7.37,51.57
+89,Karlsruhe,Germany,"Karlsruhe, Germany",8.40952205,49.01587685
+90,Catania,Italy,"Catania, Italy",15.0308307,37.460341549999995
+91,Mannheim,Germany,"Mannheim, Germany",8.467236,49.489591000000004
+92,Nantes,France,"Nantes, France",-1.5603278999999999,47.238221949999996
+93,Gala<U+021B>i,Romania,"Gala<U+021B>i, Romania",28.02,45.25
+94,Craiova,Romania,"Craiova, Romania",23.80686605,44.323382949999996
+95,Philadelphia,United States,"Philadelphia,United States",-75.11806455,40.00248215
+96,Pittsburgh,United States,"Pittsburgh,United States",-79.9900861,40.44169410000001
+97,Columbus,United States,"Columbus,United States",-82.9907458,39.9829828
+98,Indianapolis,United States,"Indianapolis,United States",-86.1583502,39.76833310000001
+99,Saint Louis,United States,"Saint Louis,United States",-90.2434724,38.65333055
+100,Chicago,United States,"Chicago,United States",-87.73209109999999,41.8337853
+101,Milwaukee,United States,"Milwaukee,United States",-87.96701445,43.05788205
+102,Detroit,United States,"Detroit,United States",-83.09919905000001,42.352717600000005
+103,Cleveland,United States,"Cleveland,United States",-81.70591884999999,41.497532
+104,Des Moines,United States,"Des Moines,United States",-93.60143485,41.56927475
+105,Mineapolis,United States,"Mineapolis,United States",-93.16,44.58
+106,Kansas City,United States,"Kansas City,United States",-94.57571949999999,39.091919000000004

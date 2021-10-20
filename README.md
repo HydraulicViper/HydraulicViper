@@ -22,5 +22,15 @@ The script load a sampling matrix for 12 root traits (anatomical traits, subcell
 
 It load 3 soil types (loam, sandy loam and a silty clay soil).
 
-The results are then stored in the "res" folder. 
- 
+The results are then stored in the "res" folder.
+
+### Folder content:
+
+- CplantBox contains the CplantBox version used to generate the root system structure.
+- HydaulicAnatomy has the MECHA code and the script used to generate anatomies with GRANAR. The script used to train and validate meta-models is included.
+- Hydrus contains Hydrus-1D version with the Couvreur model implemented.
+- R is the folder with most of the actual code for Hydraulic Viper (mainly B73_function.R, and getSUF.R which is the MARSHAL)
+- res has some of the output files which can be created when running the "../B73_lite.R" script. 
+- sampling contains the sampling matrix used to run the main root water uptake simulations.
+- WeatherData is a folder including scripts to gather climatic data from GPS coordinates and Penman-Monteith equations related to the estimation of ET0
+
