@@ -36,7 +36,8 @@ The results are then stored in the "res" folder.
 
 ### GRANAR - MECHA: Global sensitivity analysis of the hydraulic properties at the cross section level
 
-To generate root cross section, the following script was used:
+#### GRANAR
+To generate root cross section:
 
 ```{r}
 
@@ -58,6 +59,8 @@ for(i in 1:nrow(Sampl)){
 }
 
 ```
+
+#### MECHA
 To estimate the root radial hydraulic conductivities of the generate root cross section, the following script was used:
 
 ```{r}
@@ -94,5 +97,96 @@ for(j in fls){
 }
 
 ```
+
+#### Training the meta-model
+
+```{r}
+
+All_data <- read.csv("./data_GRANAR_MECHA.csv")
+
+library(caret)
+# Run algorithms using 10-fold cross validation
+control <- trainControl(method="cv", number=10)
+metric <- "RMSE"
+
+to_est <- c("kr_1", "kr_2", "kr_3")
+descr = c("radius", "var_stele", "var_xylem", "aerenchyma", "kw", "km", "kAQP", "kpl", "thickness")
+
+ACCU <- NULL
+memo = c(10,10,10)
+op <- options(digits.secs = 6)
+for(i in 1:10){
+  for(est in to_est){
+    pos <- which(colnames(data_GM) == est)
+    seed <- round(parse_number(unlist(str_split(as.character(Sys.time()), ":"))[3])*10000)
+    set.seed(seed)
+    
+    y <- c(t(data_GM[,pos]))
+    validation_index <- createDataPartition(y, p=0.80, list=FALSE)
+    # select 20% of the data for validation
+    validation <- data_GM[-validation_index,]
+    # use the remaining 80% of data to training and testing the models
+    dataset <- data_GM[validation_index,]
+
+    global <- dataset%>%
+      mutate(id = 1:nrow(dataset))
+    
+    descriptor <- global%>%select(descr, "id")#-kr_1,-kr_2,-kr_3,-sampl_id)
+    ground_truth <- global%>%select(c(est, "id"))
+    colnames(ground_truth)<- c("kr", "id")
+    train <- left_join(ground_truth, descriptor, by="id")%>%
+      select(-id)
+    
+    # cart
+    fit.cart <- train(kr~., data=train, method="rpart", metric=metric, trControl=control)
+    # KNN
+    fit.knn <- train(kr~., data=train, method="knn", metric=metric, trControl=control)
+    # Advanced algorithms
+    fit.svm <- train(kr~., data=train, method="svmRadial", metric=metric, trControl=control)
+    # Random Forest
+    fit.rf <- train(kr~., data=train, method="rf", metric=metric, trControl=control)
+
+    results <- resamples(list(cart=fit.cart, knn=fit.knn, svm=fit.svm, rf=fit.rf))
+    summary(results)
+    print(dotplot(results))
+
+    predictions <- predict(fit.svm, validation)
+    accuracy = tibble(x = validation[,pos], y = predictions)
+    RMSE = sqrt(sum((accuracy$x-accuracy$y)^2)/nrow(accuracy))
+    nrrmse = (RMSE/(max(accuracy$x)-min(accuracy$x)))*100
+    fit <- lm(unlist(accuracy$x) ~ accuracy$y)
+    tmp_svm <- tibble(kr = est, model_type = "svm", rmse = RMSE, nrrmse = nrrmse, rsquare = summary(fit)$r.squared, seed = seed)
+
+    predictions <- predict(fit.knn, validation)
+    accuracy = tibble(x = validation[,pos], y = predictions)
+    RMSE = sqrt(sum((accuracy$x-accuracy$y)^2)/nrow(accuracy))
+    nrrmse = (RMSE/(max(accuracy$x)-min(accuracy$x)))*100
+    fit <- lm(unlist(accuracy$x) ~ accuracy$y)
+    tmp_knn <- tibble(kr = est, model_type = "knn", rmse = RMSE, nrrmse = nrrmse, rsquare = summary(fit)$r.squared, seed = seed)
+
+    predictions <- predict(fit.cart, validation)
+    accuracy = tibble(x = validation[,pos], y = predictions)
+    RMSE = sqrt(sum((accuracy$x-accuracy$y)^2)/nrow(accuracy))
+    nrrmse = (RMSE/(max(accuracy$x)-min(accuracy$x)))*100
+    fit <- lm(unlist(accuracy$x) ~ accuracy$y)
+    tmp_cart <- tibble(kr = est, model_type = "cart", rmse = RMSE, nrrmse = nrrmse, rsquare = summary(fit)$r.squared, seed = seed)
+    
+    predictions <- predict(fit.rf, validation)
+    accuracy = tibble(x = validation[,pos], y = predictions)
+    t <- t.test(accuracy$x, accuracy$y, alternative = "two.sided" )
+    RMSE = sqrt(sum((accuracy$x-accuracy$y)^2)/nrow(accuracy))
+    nrrmse = (RMSE/(max(accuracy$x)-min(accuracy$x)))*100
+    fit <- lm(unlist(accuracy$x) ~ accuracy$y)
+    tmp_rf <- tibble(kr = est, model_type = "rf", rmse = RMSE, nrrmse = nrrmse, rsquare = summary(fit)$r.squared, seed = seed)
+
+    ACCU = rbind(ACCU, tmp_svm, tmp_rf, tmp_knn, tmp_cart)
+  }
+}
+
+```
+
+
+
+
 
 

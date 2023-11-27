@@ -32,7 +32,13 @@ From the [FAO Chapter 3](https://www.fao.org/3/X0490E/x0490e00.htm) we used the 
  
  To get the standard evapotranspiration ($ET_0$) of the localization, in this study case: Palomero, Italy
 
-From the figure 2 of [Campos et al., 2017](https://doi.org/10.1016/j.agwat.2017.03.022) we deduced the equation $Kc = 1.1*(1-e^{-(\frac{GDD}{620})^3})+0.1$. This Crop coefficient was use to get the Potential Transpiration of a standard Maize field. $T_{pot} = Kc * ET_0$.
+From the figure 2 of [Campos et al., 2017](https://doi.org/10.1016/j.agwat.2017.03.022) we deduced the equation
+
+$LAI = \frac{5.76}{( 1 + e^{-0.013 * (GDD - 502.74)})}$ 
+
+$K_t = 1-exp(-0.52*LAI)$ and $K_{cb} = Kt/0.9$
+
+This Crop coefficient was use to get the Potential Transpiration of a standard Maize field. $T_{pot} = K_{cb} * ET_0$.
 
 
 ```{r get_weather, eval = F}
