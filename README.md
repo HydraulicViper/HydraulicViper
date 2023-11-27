@@ -196,10 +196,10 @@ Sampling matrix
 
 | Abbreviation, Unit      | Variable description                                             | Range            |
 |-------------------------|-------------------------------------------------------------------|------------------|
-| $Cv_{MX}$ (\%)          | Coefficient of variation from the average ratio between            | [-20; 20]        |
-|                         | the meta-xylem area over the stele area.                           |                  |
-| $Cv_{S}$ (\%)           | Coefficient of variation from the average ratio between the stele  | [-30; 40]        |
-|                         | area and the root cross section area.                              |                  |
+| $Cv_{MX}$ (\%)          | Coefficient of variation from the average ratio between \n the meta-xylem area over the stele area.           | [-20; 20]        |
+|                         |                            |                  |
+| $Cv_{S}$ (\%)           | Coefficient of variation from the average ratio between the stele \n area and the root cross section area. | [-30; 40]        |
+|                         |                               |                  |
 | $R_{Lat}$ ($\mu m$)     | Lateral root radius                                               | [100; 150]       |
 | $R_{Sem}$ ($\mu m$)     | Seminal root radius                                               | [200; 400]       |
 | $R_{SBR}$ ($\mu m$)     | Shoot born root radius                                            | [300; 700]       |
@@ -207,8 +207,8 @@ Sampling matrix
 | $k_W$ ($cm^2 hPa^{-1} d^{-1}$) | Cell wall hydraulic conductivity                           | [$1E^{-4}$; $4E^{-4}$] |
 | $K_{PL}$ ($cm^3 hPa^{-1} d^{-1}$) | Plasmodesmata hydraulic conductance                    | [$6E^{-13}$; $1E^{-11}$] |
 | $k_{AQP}$ ($cm^2 hPa^{-1} d^{-1}$) | Aquaporin contribution to the cell membrane hydraulic conductivity. | [$2E^{-4}$; $7.5E^{-4}$] |
-| $dt_{S-MX}$ (day)       | Time delay between the beginning of the endodermis suberization   | [-0.5; 4]        |
-|                         | and of the meta-xylem maturation.                                 |                  |
+| $dt_{S-MX}$ (day)       | Time delay between the beginning of the endodermis suberization \n and of the meta-xylem maturation.   | [-0.5; 4]        |
+|                         |                                  |                  |
 | $dt_{MX}$ (day)         | Duration of the maturation of the meta-xylem vessels               | [1; 4]           |
 | $dt_{Hb}$ (day)         | Duration of the deposition of hydrophobic barriers or the delay    | [1; 4]           |
 |                         | between two levels of hydrophobic barriers.                        |                  |
