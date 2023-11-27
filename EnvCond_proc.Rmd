@@ -1,0 +1,52 @@
+---
+title: "Generation of weather records"
+output: html_document
+---
+
+Adrien Heymans
+
+> Code used to obtain Weather time series and the Transpiration demand of a standard corn field in Palomero, Italy from 15$^{th}$ of May to the 15$^{th}$ of July
+
+## NASA POWER global meteorology
+
+We used an API client for NASA POWER global meteorology, surface solar energy and climatology data API. We used it because the POWER (Prediction Of Worldwide Energy Resource) data are freely available for download with varying spatial resolutions dependent on the original data and with several temporal resolutions depending on the POWER parameter and community. 
+
+This work is funded through the NASA Earth Science Directorate Applied Science Program. For more on the data themselves, the methodologies used in creating, a web- based data viewer and web access, please see https://power.larc.nasa.gov/
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(nasapower)
+library(tidyverse)
+library(readxl)
+`%!in%` <- compose(`!`, `%in%`)
+source("./R/get_weather.R")
+
+```
+
+## Penman-Monteith Equations
+ 
+From the [FAO Chapter 3](https://www.fao.org/3/X0490E/x0490e00.htm) we used the Penman-Monteith equations: 
+ 
+ $ET_0 = \frac {0.408*\Delta*Rn+\gamma* \frac{900}{T2M+273}*WS2M*(e_s-e_a)}{\Delta+\gamma*(1+0.34*WS2M)}$
+ 
+ To get the standard evapotranspiration ($ET_0$) of the localization, in this study case: Palomero, Italy
+
+From the figure 2 of [Campos et al., 2017](https://doi.org/10.1016/j.agwat.2017.03.022) we deduced the equation $Kc = 1.1*(1-e^{-(\frac{GDD}{620})^3})+0.1$. This Crop coefficient was use to get the Potential Transpiration of a standard Maize field. $T_{pot} = Kc * ET_0$.
+
+
+```{r get_weather, eval = F}
+
+daily_ag <- get_weather(lon = 13.34716, lat = 38.13726, year = 2018)
+daily_ag$local <- "Palomero, Italy"
+
+
+```
+
+```{r, eval=F}
+write.csv(daily_ag, "./www/Weather_data.csv")
+
+```
+
+
+
