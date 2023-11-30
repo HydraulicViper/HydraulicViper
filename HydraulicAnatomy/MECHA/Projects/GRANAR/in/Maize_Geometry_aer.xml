@@ -32,9 +32,7 @@
     <!-- ID number of passage cells in the endodermis, ideally in front of early metaxylem vessels -->
   </passage_cell_range>
   <aerenchyma_range>
-    <aerenchyma id="2006"/>
-    <aerenchyma id="2503"/>
-    <aerenchyma id="2722"/>
+    <aerenchyma id="347"/>
   </aerenchyma_range>
   <InterC_perim_search value="0"/>
   <!-- 0: no search of intercellular spaces based on their perimeter; 1: search of intercellular spaces based on their perimeter -->
@@ -55,7 +53,7 @@
   <diffusion_length cortex="nan" stele="nan"/>
   <!-- (microns) -->
   <!-- Cell wall properties -->
-  <thickness value="1.86354701519012"/>
+  <thickness value="1.39347486495972"/>
   <!-- Double cell wall thickness (microns) Andème-Onzighi et al. (2002)) -->
   <!-- Plasmodesmata geometrical properties -->
   <PD_section value="7.47E-5"/>

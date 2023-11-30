@@ -16,7 +16,7 @@
              1.3E-7:  Cellulose wall Briggs (1967) for thickness of 1.5 micron
              1.8E-9:  Maize root cell wall Tyree (1973) for thickness of 1.5 micron -->
   <kwrange>
-    <kw value="0.00234762146615982"/>
+    <kw value="0.00100887139749527"/>
     <!-- hydraulic conductivity of standard walls -->
   </kwrange>
   <!-- Apoplastic barrier conductivity
@@ -35,7 +35,7 @@
              3.0E-5: km after removal of kAQP and kpl from Elhert et al. (2009) and Bret-Hart and Silk (1994)-->
   <km value="3.0E-5"/>
   <kAQPrange>
-    <kAQP value="0.00133444519737363" epi_factor="1.0" exo_factor="1.0" cortex_factor="1.0" endo_factor="1.0" stele_factor="1.0"/>
+    <kAQP value="0.00197310635954142" epi_factor="1.0" exo_factor="1.0" cortex_factor="1.0" endo_factor="1.0" stele_factor="1.0"/>
   </kAQPrange>
   <ratio_cortex value="1.0"/>
   <!-- (-) ratio of cell membranes hydraulic conductivity between inner and outer cortex -->

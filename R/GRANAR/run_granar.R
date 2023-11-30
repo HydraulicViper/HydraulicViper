@@ -2,9 +2,9 @@
 
 run_granar <- function(params, tmp_sampl, i = NULL){
   
-  if(file.exists("./MECHA/cellsetdata/current_root.xml")){
-    file.remove("./MECHA/cellsetdata/current_root.xml")
-    file.remove("./MECHA/Projects/GRANAR/in/Maize_Geometry_aer.xml")
+  if(file.exists("./HydraulicAnatomy/MECHA/cellsetdata/current_root.xml")){
+    file.remove("./HydraulicAnatomy/MECHA/cellsetdata/current_root.xml")
+    file.remove("./HydraulicAnatomy/MECHA/Projects/GRANAR/in/Maize_Geometry_aer.xml")
   }
   
   params$value[params$type == "cell_diameter" & params$name == "stele"] <- tmp_sampl$OneC/2.2
@@ -29,36 +29,36 @@ run_granar <- function(params, tmp_sampl, i = NULL){
   }
   
   sim <- create_anatomy(parameters = params)
-  write_anatomy_xml(sim, "./MECHA/cellsetdata/current_root.xml")
+  write_anatomy_xml(sim, "./HydraulicAnatomy/MECHA/cellsetdata/current_root.xml")
   if(length(sim$id_aerenchyma) > 0){
-    aer_in_geom_xml(sim, "./MECHA/Projects/GRANAR/in/Maize_Geometry.xml")
+    aer_in_geom_xml(sim, "./HydraulicAnatomy/MECHA/Projects/GRANAR/in/Maize_Geometry.xml")
   }else{
-    fc <- file.copy("./MECHA/Projects/GRANAR/in/Maize_Geometry_noAA.xml", "./MECHA/Projects/GRANAR/in/Maize_Geometry_aer.xml", overwrite = T )
+    fc <- file.copy("./HydraulicAnatomy/MECHA/Projects/GRANAR/in/Maize_Geometry_noAA.xml", "./MECHA/Projects/GRANAR/in/Maize_Geometry_aer.xml", overwrite = T )
   }
   
   if(!is.null(i)){
-    file.copy("./MECHA/cellsetdata/current_root.xml", paste0("./MECHA/cellsetdata/root_",i,".xml"), overwrite = T)
-    file.copy("./MECHA/Projects/GRANAR/in/Maize_Geometry_aer.xml",
-            paste0( "./MECHA/Projects/GRANAR/in/Maize_Geometry_aer_",i,".xml"), overwrite = T)
+    file.copy("./HydraulicAnatomy/MECHA/cellsetdata/current_root.xml", paste0("./HydraulicAnatomy/MECHA/cellsetdata/root_",i,".xml"), overwrite = T)
+    file.copy("./HydraulicAnatomy/MECHA/Projects/GRANAR/in/Maize_Geometry_aer.xml",
+            paste0( "./HydraulicAnatomy/MECHA/Projects/GRANAR/in/Maize_Geometry_aer_",i,".xml"), overwrite = T)
   }else{return(sim)}
   
 }
 
 run_Mecha <- function(tmp_sampl, i = NULL){
   
-  if(file.exists("./MECHA/Projects/GRANAR/out/M1v4/Root/Project_Test/results/Macro_prop_1,0.txt")){
-    file.remove("./MECHA/Projects/GRANAR/out/M1v4/Root/Project_Test/results/Macro_prop_1,0.txt")
-    file.remove("./MECHA/Projects/GRANAR/out/M1v4/Root/Project_Test/results/Macro_prop_2,1.txt")
-    file.remove("./MECHA/Projects/GRANAR/out/M1v4/Root/Project_Test/results/Macro_prop_4,2.txt")
-    file.remove("./MECHA/cellsetdata/current_root.xml")
-    file.remove("./MECHA/Projects/GRANAR/in/Maize_Geometry_aer.xml")
+  if(file.exists("./HydraulicAnatomy/MECHA/Projects/GRANAR/out/M1v4/Root/Project_Test/results/Macro_prop_1,0.txt")){
+    file.remove("./HydraulicAnatomy/MECHA/Projects/GRANAR/out/M1v4/Root/Project_Test/results/Macro_prop_1,0.txt")
+    file.remove("./HydraulicAnatomy/MECHA/Projects/GRANAR/out/M1v4/Root/Project_Test/results/Macro_prop_2,1.txt")
+    file.remove("./HydraulicAnatomy/MECHA/Projects/GRANAR/out/M1v4/Root/Project_Test/results/Macro_prop_4,2.txt")
+    file.remove("./HydraulicAnatomy/MECHA/cellsetdata/current_root.xml")
+    file.remove("./HydraulicAnatomy/MECHA/Projects/GRANAR/in/Maize_Geometry_aer.xml")
   }
   
-  fc <- file.copy(paste0("./MECHA/cellsetdata/root_",i,".xml"), "./MECHA/cellsetdata/current_root.xml", overwrite = T)
-  file.copy(paste0("./MECHA/Projects/GRANAR/in/Maize_Geometry_aer_", i, ".xml"),
-            paste0("./MECHA/Projects/GRANAR/in/Maize_Geometry_aer.xml"), overwrite = T)
+  fc <- file.copy(paste0("./HydraulicAnatomy/MECHA/cellsetdata/root_",i,".xml"), "./HydraulicAnatomy/MECHA/cellsetdata/current_root.xml", overwrite = T)
+  file.copy(paste0("./HydraulicAnatomy/MECHA/Projects/GRANAR/in/Maize_Geometry_aer_", i, ".xml"),
+            paste0("./HydraulicAnatomy/MECHA/Projects/GRANAR/in/Maize_Geometry_aer.xml"), overwrite = T)
   
-  microhydro(path = "MECHA/Projects/GRANAR/in/Maize_Geometry_aer.xml",
+  microhydro(path = "HydraulicAnatomy/MECHA/Projects/GRANAR/in/Maize_Geometry_aer.xml",
              kw = tmp_sampl$kw,
              km = tmp_sampl$km, 
              kAQP = tmp_sampl$kAQP,
@@ -68,20 +68,19 @@ run_Mecha <- function(tmp_sampl, i = NULL){
   
   # Run MECHA - - - - - - - 
   
-  # system("C:/Users/heymansad/AppData/Local/Continuum/anaconda3/envs/MECHA/python.exe MECHA/MECHAv4_GRANAR.py")
-  system("C:/Users/heymansad/AppData/Local/Continuum/anaconda3/envs/MECHA/python.exe MECHA/MECHAv4_septa.py")
+    system("C:/Users/heymansad/AppData/Local/Continuum/anaconda3/envs/MECHA/python.exe MECHA/MECHAv4_septa.py")
   message("python script has ended")
   
   # if works well then
-  if(file.exists("./MECHA/Projects/GRANAR/out/M1v4/Root/Project_Test/results/Macro_prop_1,0.txt")){
+  if(file.exists("./HydraulicAnatomy/MECHA/Projects/GRANAR/out/M1v4/Root/Project_Test/results/Macro_prop_1,0.txt")){
     
     message ("success")
-    file.copy("./MECHA/Projects/GRANAR/out/M1v4/Root/Project_Test/results/Macro_prop_1,0.txt",
-              paste0("./MECHA/Projects/GRANAR/out/M1v4/Root/Macro_prop_1,0_",i,".txt"), overwrite = T)
-    file.copy("./MECHA/Projects/GRANAR/out/M1v4/Root/Project_Test/results/Macro_prop_2,1.txt",
+    file.copy("./HydraulicAnatomy/MECHA/Projects/GRANAR/out/M1v4/Root/Project_Test/results/Macro_prop_1,0.txt",
+              paste0("./HydraulicAnatomy/MECHA/Projects/GRANAR/out/M1v4/Root/Macro_prop_1,0_",i,".txt"), overwrite = T)
+    file.copy("./HydraulicAnatomy/MECHA/Projects/GRANAR/out/M1v4/Root/Project_Test/results/Macro_prop_2,1.txt",
               paste0("./MECHA/Projects/GRANAR/out/M1v4/Root/Macro_prop_2,1_",i,".txt"), overwrite = T)
-    file.copy("./MECHA/Projects/GRANAR/out/M1v4/Root/Project_Test/results/Macro_prop_4,2.txt",
-              paste0("./MECHA/Projects/GRANAR/out/M1v4/Root/Macro_prop_4,2_",i,".txt"), overwrite = T)
+    file.copy("./HydraulicAnatomy/MECHA/Projects/GRANAR/out/M1v4/Root/Project_Test/results/Macro_prop_4,2.txt",
+              paste0("./HydraulicAnatomy/MECHA/Projects/GRANAR/out/M1v4/Root/Macro_prop_4,2_",i,".txt"), overwrite = T)
   }else{message ("fail and move to next simulation")}
   
 }

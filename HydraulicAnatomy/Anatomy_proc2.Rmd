@@ -928,7 +928,7 @@ ACCU <- NULL
 memo = c(10,10,10)
 op <- options(digits.secs = 6)
 for(i in 1:10){
-for(est in to_est){
+  for(est in to_est){
   pos <- which(colnames(data_GM) == est)
   seed <- round(parse_number(unlist(str_split(as.character(Sys.time()), ":"))[3])*10000)
   set.seed(seed)

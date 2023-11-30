@@ -17,13 +17,23 @@ getSUF <- function(table_data = NULL,
   #	Calculates Couvreur Macroscopic parameters   #
   ####################################################
   # Felicien Meunier, 06/2017
-  # Adrien Heymans, 08/2021
+  # Adrien Heymans 07/22
+  #
+  # table_data <- temp_root
+  # table_cond <- temp_conduct
+  # table_soil <- temp_soil
+  # table_data <-  fread("www/rootsystem2.txt", header = T)
+  # setwd("../")
+
+  # table_cond <- read_csv("www/conductivities.csv")
+
+   ###################################################################
+  #  /!\ Connection between basal and Shoot born root with the main axes  #
+   ###################################################################
 
   if(length(table_data$K_type[1]) > 0){ # If root type has been modified as a function of the radius
-    print("yes")
     radtype = T
     }else{
-      print("no")
      radtype = F
      }
   
@@ -34,13 +44,13 @@ getSUF <- function(table_data = NULL,
   l <- table_data$length    	  # segment length
   
   if(length(l[l == 0]) > 0){
-    message(paste0(length(l[l == 0])," root segment are 0 mm long"))
+    #message(paste0(length(l[l == 0])," root segment are 0 mm long"))
   }
   l[l == 0] <- 10e-9
   r <- table_data$radius 	  # segment radius in cm
 
   if(length(r[r== 0]) > 0){
-    message(paste0(length(r[r == 0])," root segment have a radius of 0 mm "))
+   # message(paste0(length(r[r == 0])," root segment have a radius of 0 mm "))
   }
   r[r == 0] <- 10e-9
 
@@ -81,25 +91,27 @@ getSUF <- function(table_data = NULL,
   }
   # Meunier et al. 2018 Measuring and Modeling Hydraulic Lift of Lolium multiflorum Using Stable Water Isotopes
   table_data$Be <- (2*(1-table_data$rho^2))/((-2*table_data$rho^2)*(log(table_data$rho, base = exp(1))-(1/2))-1) # dimenssion less geometric param 
-  
+  # print("geometric param on root")
   if(is.null(soil_param)){
-    soil_param <- data.frame (n = 1.89, alpha = 0.075,  Ksat = 106.1, lambda = 0.5)
+    soil_param <- data.frame (n = 1.89, alpha = 0.075,  Ksat = 25, lambda = 0.5,Q_r = 0.078, Q_s = 0.43)
   }
   soil_param$m <- 1 - 1/soil_param$n # depending on the hyposthesis it could be also "m = 1 - 2/n"
-  table_soil$Se <- 1/(1+(abs(soil_param$alpha*table_soil$psi))^soil_param$n)^soil_param$m # 
+
+  table_soil$theta_h = soil_param$Q_r+(soil_param$Q_s-soil_param$Q_r)/(1+abs(soil_param$alpha*table_soil$psi)^soil_param$n)^soil_param$m
+  table_soil$theta_h[table_soil$theta_h >= soil_param$Q_s] = soil_param$Q_s 
+  table_soil$Se = (table_soil$theta_h-soil_param$Q_r)/(soil_param$Q_s -soil_param$Q_r)
+  # table_soil$Se <- 1/(1+(abs(soil_param$alpha*table_soil$psi))^soil_param$n)^soil_param$m #
+
+
   # Van Genuchten 1980
-  table_soil$Ksoil <- soil_param$Ksat*table_soil$Se^soil_param$lambda*(1-(1-table_soil$Se^(soil_param$lambda/soil_param$m))^soil_param$m)^2
+  table_soil$Ksoil <- soil_param$Ksat*table_soil$Se^soil_param$lambda*(1-(1-table_soil$Se^(1/soil_param$m))^soil_param$m)^2
   table_soil$z_reso <- table_soil$z
   table_data$z_reso <- round(table_data$z2/2)*2
   table_data <- left_join(table_data, table_soil%>%select(psi,Se, Ksoil, z_reso), by= "z_reso")
-  
   ####################################################
   # Interpolates kr,kx functions
 
   order_uni=unique(order)
-
-  # kr=matrix(10e-3,Nseg,1) # radial conductivity of the segments
-  # kx=matrix(1000,Nseg,1) # Axial conductance of the segments
 
   kr=matrix(0,Nseg,1) # radial conductivity of the segments
   kx=matrix(0,Nseg,1) # Axial conductance of the segments
@@ -134,7 +146,6 @@ getSUF <- function(table_data = NULL,
   kr_eq <- matrix(0,Nseg,1)
   kr_eq[,1] <- table_data$Kieq/(2*pi*table_data$length*r)
   kr_eq[is.na(kr_eq[,1]),1] <- 1E-15
-
   # Combination of hydraulics and geomitric properties
   kappa=sqrt(2*pi*r*kr*kx)  # kappa
   kappa_eq = sqrt(2*pi*r*kr_eq*kx)
@@ -142,7 +153,7 @@ getSUF <- function(table_data = NULL,
   tau_eq = sqrt(2*pi*r*kr_eq/kx)
 
   mse_kr = (1/Nseg)*sum((kr_eq-kr)^2)
-  print(paste0("MSE kr kr_eq = ",mse_kr))
+  # print(paste0("MSE kr kr_eq = ",mse_kr))
 
   # -----------------------
   # -----------------------
@@ -213,8 +224,6 @@ getSUF <- function(table_data = NULL,
 
   prev_collar <- c(prev==0)
 
-  message(paste0("Psi_collar: ", Psi_collar))
-
   b[prev_collar] <- b[prev_collar] - (Psi_collar * (kappa[prev_collar] / sinh(tau[prev_collar] * l[prev_collar])))
   b_eq[prev_collar] <- b_eq[prev_collar] - (Psi_collar * (kappa_eq[prev_collar] / sinh(tau_eq[prev_collar] * l[prev_collar])))
 
@@ -222,7 +231,10 @@ getSUF <- function(table_data = NULL,
   # Compute solution
 
   X <- solve(a,b) 		 # a\b
-  X_eq <- solve(a_eq,b_eq) 
+  # print("solved a*b")
+  X_eq <- solve(a_eq,b_eq)
+  # print("solved a_eq*b_eq")
+
   Psi_basal <- X  		 # Solution = Psi_basal
   Psi_basal_eq <- X_eq
   prev_temp <- prev
